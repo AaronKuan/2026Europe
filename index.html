@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>24天中歐冬季大眾運輸之旅 (2026)</title>
     
-    <!-- 離線與資源載入設定 -->
+    <!-- 資源載入 -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -26,20 +26,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        
-        .offline-map-placeholder {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #f3f4f6;
-            z-index: 5;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #6b7280;
-            text-align: center;
-            padding: 20px;
-        }
     </style>
 </head>
 <body class="bg-gray-50 h-screen overflow-hidden">
@@ -53,35 +39,8 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
-        const getCategoryColor = (type) => {
-            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return 'bg-gray-500';
-            if (type.includes('住宿')) return 'bg-purple-600';
-            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return 'bg-red-500';
-            return 'bg-blue-600';
-        };
-
-        const getCategoryColorHex = (type) => {
-            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280';
-            if (type.includes('住宿')) return '#9333ea';
-            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return '#ef4444';
-            return '#2563eb';
-        };
-
-        const getDayColorHex = (day) => {
-            const colors = ['#3b82f6', '#f97316', '#22c55e', '#a855f7', '#ef4444'];
-            return colors[(day - 1) % 5];
-        };
-
-        const getCountry = (city) => {
-             const map = {
-                'Munich': '德國', 'Füssen': '德國', 'Dresden': '德國', 'Berlin': '德國',
-                'Salzburg': '奧地利', 'Hallstatt': '奧地利', 'Vienna': '奧地利',
-                'Budapest': '匈牙利', 'Prague': '捷克', 'Cesky Krumlov': '捷克'
-            };
-            return map[city] || '其他';
-        };
-
-        // --- Data: 24 Days Itinerary (No Images) ---
+        // --- Data: 24 Days Itinerary (Embedded for Stability) ---
+        // 為了確保在預覽環境與 GitHub 都能穩定運作，我们将資料整合回此檔案。
         const itineraryData = [
             {
                 day: 1,
@@ -154,8 +113,14 @@
                 notes: "薩爾斯堡卡 (Salzburg Card) 極力推薦，包含交通與景點。",
                 spots: [
                     { name: "慕尼黑 -> 薩爾斯堡", type: "交通", time: "09:00 | 1.5-2小時", trans: "Meridian (M) 或 RJX 火車", lat: 47.8129, lng: 13.0454 },
-                    { name: "米拉貝爾宮 (Mirabellgarten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行", lat: 47.8055, lng: 13.0416 },
-                    { name: "糧食胡同 (Getreidegasse)", type: "逛街", time: "16:30 | 2小時", trans: "步行過橋", lat: 47.7997, lng: 13.0425 }
+                    { 
+                        name: "米拉貝爾宮 (Mirabellgarten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行", lat: 47.8055, lng: 13.0416,
+                        details: { open: "08:00 - 18:00", price: "花園免費" }
+                    },
+                    { 
+                        name: "糧食胡同 (Getreidegasse)", type: "逛街", time: "16:30 | 2小時", trans: "步行過橋", lat: 47.7997, lng: 13.0425,
+                        details: { open: "全天開放 (商店約至18:00)", price: "免費" }
+                    }
                 ]
             },
             {
@@ -172,8 +137,14 @@
                         name: "薩爾斯堡要塞 (Festung)", type: "景點", time: "09:30 | 2.5小時", trans: "Festungsbahn 纜車", lat: 47.7949, lng: 13.0475,
                         details: { open: "09:30 - 17:00", price: "€14.50 (基本) / 持卡免費" }
                     },
-                    { name: "莫札特出生地", type: "景點", time: "13:00 | 1小時", trans: "步行", lat: 47.8000, lng: 13.0436 },
-                    { name: "薩爾斯堡大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 47.7979, lng: 13.0450 }
+                    { 
+                        name: "莫札特出生地", type: "景點", time: "13:00 | 1小時", trans: "步行", lat: 47.8000, lng: 13.0436,
+                        details: { open: "09:00 - 17:30", price: "€13.50 / 持卡免費" }
+                    },
+                    { 
+                        name: "薩爾斯堡大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 47.7979, lng: 13.0450,
+                        details: { open: "08:00 - 17:00", price: "自由捐獻" }
+                    }
                 ]
             },
             {
@@ -205,8 +176,14 @@
                 notes: "維也納中央車站 (Wien Hbf) 生活機能強，超市多。",
                 spots: [
                     { name: "薩爾斯堡 -> 維也納", type: "交通", time: "09:08 | 2.5小時", trans: "ÖBB Railjet (RJX)", lat: 48.1851, lng: 16.3762 },
-                    { name: "貝爾维德宮 (Belvedere)", type: "景點", time: "14:00 | 2.5小時", trans: "步行或電車 D 線", lat: 48.1915, lng: 16.3809 },
-                    { name: "卡爾教堂 (Karlskirche)", type: "景點", time: "17:00 | 1小時", trans: "U-Bahn U1", lat: 48.1982, lng: 16.3718 }
+                    { 
+                        name: "貝爾维德宮 (Belvedere)", type: "景點", time: "14:00 | 2.5小時", trans: "步行或電車 D 線", lat: 48.1915, lng: 16.3809,
+                        details: { open: "10:00 - 18:00", price: "€16 (上宮)" }
+                    },
+                    { 
+                        name: "卡爾教堂 (Karlskirche)", type: "景點", time: "17:00 | 1小時", trans: "U-Bahn U1", lat: 48.1982, lng: 16.3718,
+                        details: { open: "09:00 - 18:00", price: "€9.50" }
+                    }
                 ]
             },
             {
@@ -282,10 +259,7 @@
                 tickets: "國會大廈務必提前官網預約導覽。溫泉自備泳衣拖鞋。",
                 notes: "國會大廈安檢嚴格。冬季泡露天溫泉是獨特體驗。",
                 spots: [
-                    { 
-                        name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456,
-                        details: { open: "08:00 - 16:00 (需預約)", price: "HU 10000 (非歐盟公民)" }
-                    },
+                    { name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456 },
                     { name: "塞切尼溫泉 (Széchenyi)", type: "體驗", time: "15:00 | 3小時", trans: "Metro M1 Széchenyi fürdő", lat: 47.5186, lng: 19.0822 },
                     { name: "英雄廣場", type: "景點", time: "18:00 | 0.5小時", trans: "步行", lat: 47.5138, lng: 19.0778 }
                 ]
@@ -473,19 +447,54 @@
             }
         ];
 
-        // --- Common Component: Spot Details Panel (NO IMAGES) ---
+        // --- Helper Functions ---
+        const getCategoryColor = (type) => {
+            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return 'bg-gray-500';
+            if (type.includes('住宿')) return 'bg-purple-600';
+            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return 'bg-red-500';
+            return 'bg-blue-600';
+        };
+
+        const getCategoryColorHex = (type) => {
+            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280';
+            if (type.includes('住宿')) return '#9333ea';
+            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return '#ef4444';
+            return '#2563eb';
+        };
+
+        const getDayColorHex = (day) => {
+            const colors = ['#3b82f6', '#f97316', '#22c55e', '#a855f7', '#ef4444'];
+            return colors[(day - 1) % 5];
+        };
+
+        const getCountry = (city) => {
+             const map = {
+                'Munich': '德國', 'Füssen': '德國', 'Dresden': '德國', 'Berlin': '德國',
+                'Salzburg': '奧地利', 'Hallstatt': '奧地利', 'Vienna': '奧地利',
+                'Budapest': '匈牙利', 'Prague': '捷克', 'Cesky Krumlov': '捷克'
+            };
+            return map[city] || '其他';
+        };
+
+        // --- Component: Spot Details Panel (TEXT ONLY) ---
         const SpotDetailsPanel = ({ details }) => {
             if (!details) return null;
             return (
-                <div className="overflow-hidden">
-                    <div className="grid grid-cols-2 gap-2 mb-3 text-xs bg-white rounded p-2 border border-gray-100 shadow-sm mt-3">
-                        <div className="flex items-center text-gray-700">
-                            <i className="far fa-clock text-blue-500 w-5 text-center mr-1"></i>
-                            <span>{details.open}</span>
+                <div className="overflow-hidden mt-2">
+                    <div className="grid grid-cols-1 gap-2 text-xs bg-white rounded p-3 border border-gray-200 shadow-sm">
+                        <div className="flex items-center text-gray-700 border-b border-gray-100 pb-2">
+                            <i className="far fa-clock text-blue-500 w-6 text-center mr-2"></i>
+                            <div>
+                                <span className="block text-[10px] text-gray-400">營業時間</span>
+                                <span className="font-medium">{details.open || "請查詢官網"}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center text-gray-700">
-                            <i className="fas fa-euro-sign text-amber-500 w-5 text-center mr-1"></i>
-                            <span>{details.price}</span>
+                        <div className="flex items-center text-gray-700 pt-1">
+                            <i className="fas fa-euro-sign text-amber-500 w-6 text-center mr-2"></i>
+                            <div>
+                                <span className="block text-[10px] text-gray-400">門票 / 消費</span>
+                                <span className="font-medium">{details.price || "依現場為準"}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -504,7 +513,6 @@
                     console.error("Leaflet is not loaded yet.");
                     return;
                 }
-
                 if (!mapInstance.current && mapRef.current) {
                     mapInstance.current = L.map(mapRef.current).setView([48.1351, 11.5820], 6);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -527,7 +535,7 @@
 
                 if (activeDay) {
                     const group = L.featureGroup();
-                    fullItinerary.forEach(day => {
+                    itineraryData.forEach(day => {
                         day.spots.forEach((spot, idx) => {
                             if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
                                 const isCurrentDay = day.day === activeDay.day;
@@ -604,11 +612,6 @@
             return (
                 <div className="relative h-full w-full">
                     <div id="map" ref={mapRef} className="h-full w-full z-0"></div>
-                    <div className="offline-map-placeholder hidden">
-                        <i className="fas fa-wifi-slash text-4xl mb-4"></i>
-                        <p className="font-bold">離線模式</p>
-                        <p className="text-sm">地圖圖資無法載入，請使用左側列表查看行程，<br/>或點擊「Google Map」按鈕開啟 App 導航。</p>
-                    </div>
                 </div>
             );
         };
@@ -650,7 +653,7 @@
                                                     <i className="fas fa-map-location-dot text-sm"></i>
                                                 </button>
                                             </div>
-                                            {/* Expandable Details - Using Grid Animation for Smoothness */}
+                                            {/* Details Panel */}
                                             <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isSpotActive && spot.details ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                                                 <SpotDetailsPanel details={spot.details} />
                                             </div>
@@ -704,7 +707,6 @@
                                     </div>
                                     <button onClick={(e) => { e.stopPropagation(); const query = encodeURIComponent(`${spot.name} ${spot.city}`); window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank'); }} className="ml-3 w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200 shrink-0" title="在 Google Maps 開啟"><i className="fas fa-map-location-dot text-base"></i></button>
                                 </div>
-                                {/* ADDED DETAILS TO SEARCH TAB */}
                                 <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isSpotActive && spot.details ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                                     <SpotDetailsPanel details={spot.details} />
                                 </div>
@@ -722,10 +724,16 @@
         // 5. Main App
         const App = () => {
             const [activeTab, setActiveTab] = useState('timeline');
+            // Use local state directly for stability
+            const [itineraryDataState, setItineraryDataState] = useState(itineraryData);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            
             const [activeDayId, setActiveDayId] = useState(1); // Default to Day 1
             const [activeSpot, setActiveSpot] = useState(null);
             const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
-            const activeDayData = itineraryData.find(d => d.day === activeDayId);
+
+            const activeDayData = itineraryDataState.find(d => d.day === activeDayId);
 
             const handleDayHeaderClick = (dayId) => {
                 if (activeDayId === dayId) {
@@ -764,7 +772,7 @@
                     }
                 }, 100);
             }, [activeDayId]);
-
+            
             return (
                 <div className="flex flex-col md:flex-row h-screen w-full">
                     <div className="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full bg-white shadow-[0_-5px_15px_rgba(0,0,0,0.1)] md:shadow-xl z-20 flex flex-col relative order-2 md:order-1">
@@ -773,8 +781,8 @@
                         </header>
                         <div className="flex-1 overflow-hidden relative bg-gray-50">
                             <div key={activeTab} className="h-full animate-fade-in">
-                                {activeTab === 'timeline' && <div className="h-full overflow-y-auto">{itineraryData.map(day => <DayCard key={day.day} data={day} isActive={activeDayId === day.day} activeSpot={activeSpot} onClick={() => handleDayHeaderClick(day.day)} onSpotClick={handleSpotClick} />)}<div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div></div>}
-                                {activeTab === 'search' && <SearchTab data={itineraryData} onSpotClick={handleSpotClick} activeSpot={activeSpot} />}
+                                {activeTab === 'timeline' && <div className="h-full overflow-y-auto">{itineraryDataState.map(day => <DayCard key={day.day} data={day} isActive={activeDayId === day.day} activeSpot={activeSpot} onClick={() => handleDayHeaderClick(day.day)} onSpotClick={handleSpotClick} />)}<div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div></div>}
+                                {activeTab === 'search' && <SearchTab data={itineraryDataState} onSpotClick={handleSpotClick} activeSpot={activeSpot} />}
                                 {activeTab === 'guide' && <GuideTab />}
                             </div>
                         </div>
@@ -785,7 +793,7 @@
                         </div>
                     </div>
                     <div className="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full relative border-b md:border-b-0 md:border-l border-gray-300 order-1 md:order-2">
-                        <MapComponent activeDay={activeDayData} activeSpot={activeSpot} fullItinerary={itineraryData} onCityClick={handleMapCityClick} onSpotMarkerClick={handleMapSpotMarkerClick} />
+                        <MapComponent activeDay={activeDayData} activeSpot={activeSpot} fullItinerary={itineraryDataState} onCityClick={handleMapCityClick} onSpotMarkerClick={handleMapSpotMarkerClick} />
                     </div>
                 </div>
             );
