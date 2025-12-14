@@ -50,13 +50,9 @@
 
         // Helper: Get Color based on Type
         const getCategoryColor = (type) => {
-            // 交通類：灰色
             if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return 'bg-gray-500';
-            // 住宿類：紫色
             if (type.includes('住宿')) return 'bg-purple-600';
-            // 餐飲類：紅色
             if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return 'bg-red-500';
-            // 預設 (景點/逛街/體驗)：藍色
             return 'bg-blue-600';
         };
 
@@ -442,10 +438,11 @@
         // --- Components ---
 
         // 1. Map Component (Using Raw Leaflet)
-        const MapComponent = ({ activeSpot, activeDay }) => {
+        const MapComponent = ({ activeSpot, activeDay, fullItinerary, onCityClick, onSpotMarkerClick }) => {
             const mapRef = useRef(null);
             const mapInstance = useRef(null);
             const markersRef = useRef([]);
+            const polylineRef = useRef(null);
 
             // Init Map
             useEffect(() => {
@@ -459,74 +456,118 @@
                 }
             }, []);
 
-            // Update Map View & Markers based on Active Day
+            // Update Map View & Markers based on Active Day or Full View
             useEffect(() => {
                 if (!mapInstance.current) return;
 
                 const map = mapInstance.current;
                 
-                // Clear old markers
+                // Clear old markers and lines
                 markersRef.current.forEach(m => map.removeLayer(m));
                 markersRef.current = [];
-
-                // Determine which spots to show: specific activeSpot or activeDay's spots
-                let spotsToShow = [];
-                if (activeSpot) {
-                    spotsToShow = [activeSpot]; // If a search result or specific spot is active
-                } else if (activeDay && activeDay.spots) {
-                    spotsToShow = activeDay.spots; // Show all spots for the day
+                if (polylineRef.current) {
+                    map.removeLayer(polylineRef.current);
+                    polylineRef.current = null;
                 }
 
-                if (spotsToShow.length > 0) {
-                   const group = L.featureGroup();
-                   
-                   spotsToShow.forEach((spot, idx) => {
+                // Determine Mode
+                if (activeSpot) {
+                    // --- Level 3: Single Spot Mode ---
+                    const { lat, lng } = activeSpot;
+                    if(!isNaN(lat) && !isNaN(lng)) {
+                        const colorClass = getCategoryColor(activeSpot.type);
+                        const numberIcon = L.divIcon({
+                               className: 'custom-number-icon',
+                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 border-white text-white flex items-center justify-center font-bold shadow-md text-sm"><i class="fas fa-map-marker-alt"></i></div>`,
+                               iconSize: [32, 32],
+                               iconAnchor: [16, 16],
+                               popupAnchor: [0, -16]
+                        });
+                        const marker = L.marker([lat, lng], { icon: numberIcon })
+                               .bindPopup(`<b>${activeSpot.name}</b><br/>${activeSpot.type}<br/>${activeSpot.time}`)
+                               .addTo(map)
+                               .openPopup();
+                        markersRef.current.push(marker);
+                    }
+                } else if (activeDay && activeDay.spots) {
+                    // --- Level 2: Day Mode ---
+                    const group = L.featureGroup();
+                    activeDay.spots.forEach((spot, idx) => {
                        if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
-                           // Define custom numbered icon
-                           const colorClass = getCategoryColor(spot.type); // Get dynamic color
-                           const label = activeDay ? (idx + 1) : ''; // Only show numbers if viewing a day list
-                           
+                           const colorClass = getCategoryColor(spot.type);
                            const numberIcon = L.divIcon({
                                className: 'custom-number-icon',
-                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 border-white text-white flex items-center justify-center font-bold shadow-md text-sm">${label || '<i class="fas fa-map-marker-alt"></i>'}</div>`,
+                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 border-white text-white flex items-center justify-center font-bold shadow-md text-sm cursor-pointer">${idx + 1}</div>`,
                                iconSize: [32, 32],
-                               iconAnchor: [16, 16], // Center anchor
+                               iconAnchor: [16, 16],
                                popupAnchor: [0, -16]
                            });
-
                            const marker = L.marker([spot.lat, spot.lng], { icon: numberIcon })
-                               .bindPopup(`<b>${spot.name}</b><br/>${spot.type}<br/>${spot.time}`)
-                               .addTo(map);
-                           
+                               .addTo(map)
+                               // Add click event for Map-to-List interaction
+                               .on('click', () => {
+                                   if(onSpotMarkerClick) onSpotMarkerClick(spot);
+                               });
+
                            markersRef.current.push(marker);
                            group.addLayer(marker);
-
-                           // If specific spot selected, open popup
-                           if (activeSpot && activeSpot.name === spot.name) {
-                               marker.openPopup();
-                           }
                        }
                    });
-
-                   // Fit bounds
                    if (markersRef.current.length > 0) {
-                        const bounds = group.getBounds();
-                        if (bounds.isValid()) {
-                             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-                        }
+                        map.fitBounds(group.getBounds(), { padding: [50, 50], maxZoom: 15 });
                    }
+                } else if (fullItinerary) {
+                    // --- Level 1: Full View (Overview) Mode ---
+                    // 1. Draw Polyline (Trajectory)
+                    const trajectory = fullItinerary.map(d => d.coordinates);
+                    const polyline = L.polyline(trajectory, { 
+                        color: '#2563eb', // Blue-600
+                        weight: 3, 
+                        dashArray: '8, 8', // Dashed line for movement
+                        opacity: 0.6 
+                    }).addTo(map);
+                    polylineRef.current = polyline;
+
+                    // 2. Draw City Markers
+                    const group = L.featureGroup();
+                    fullItinerary.forEach((day, idx) => {
+                        // Simple Circle Marker for cities
+                        const marker = L.circleMarker(day.coordinates, {
+                            radius: 6,
+                            fillColor: '#fff',
+                            color: '#2563eb',
+                            weight: 2,
+                            fillOpacity: 1,
+                            className: 'cursor-pointer' // Add pointer cursor
+                        }).addTo(map);
+
+                        // Add tooltip instead of popup for cleaner hover
+                        marker.bindTooltip(`<b>Day ${day.day}: ${day.city}</b>`, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+
+                        // Add click event for Map-to-List interaction
+                        marker.on('click', () => {
+                            if(onCityClick) onCityClick(day.day);
+                        });
+                        
+                        markersRef.current.push(marker);
+                        group.addLayer(marker);
+                    });
+
+                    // 3. Fit Bounds
+                    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
                 }
 
-            }, [activeDay, activeSpot]); // Re-run when activeDay or activeSpot changes
+            }, [activeDay, activeSpot, fullItinerary]); // Dependencies
 
-            // FlyTo Effect for specific spot interaction
+            // FlyTo Effect for specific spot interaction (only when single spot active)
             useEffect(() => {
                 if (mapInstance.current && activeSpot) {
                     const { lat, lng } = activeSpot;
                     if (!isNaN(lat) && !isNaN(lng)) {
-                        mapInstance.current.flyTo([lat, lng], 15, {
-                            duration: 1.5
-                        });
+                        mapInstance.current.flyTo([lat, lng], 15, { duration: 1.5 });
                     }
                 }
             }, [activeSpot]);
@@ -535,11 +576,13 @@
         };
 
         // 2. Sidebar Item (Day Card) - Existing
-        const DayCard = ({ data, isActive, onClick, onSpotClick }) => {
+        const DayCard = ({ data, isActive, onClick, onSpotClick, activeSpot }) => {
             return (
-                <div className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}>
+                <div 
+                    id={`day-${data.day}`} // Add ID for scrolling
+                    className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}
+                >
                     <div 
-                        // FIX: Changed bg-inherit to bg-white and z-10 to z-20 to prevent overlap issues
                         className="p-4 cursor-pointer flex justify-between items-center sticky top-0 bg-white z-20"
                         onClick={onClick}
                     >
@@ -561,14 +604,17 @@
                             <div className="space-y-6 relative pl-6 border-l-2 border-gray-200 ml-4">
                                 {data.spots.map((spot, idx) => {
                                     const colorClass = getCategoryColor(spot.type);
+                                    const isSpotActive = activeSpot && activeSpot.name === spot.name; // Check if this spot is active
+
                                     return (
-                                    <div key={idx} className="relative group">
-                                        <div className={`absolute -left-[35px] top-0 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10`}>
+                                    <div key={idx} className={`relative group transition-colors rounded-lg ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm' : ''}`}>
+                                        <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
                                             {idx + 1}
                                         </div>
-                                        <div className="flex justify-between items-start">
+                                        {/* Adjust margin if active to align text properly */}
+                                        <div className={`flex justify-between items-start ${isSpotActive ? 'pl-10' : ''}`}>
                                             <div className="flex-1">
-                                                <h4 className="font-bold text-gray-800 text-base">
+                                                <h4 className={`font-bold text-base ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>
                                                     {data.city} | {spot.name}
                                                 </h4>
                                                 <div className="flex flex-col mt-1 space-y-1">
@@ -582,10 +628,10 @@
                                             </div>
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); onSpotClick(spot); }}
-                                                className="ml-2 px-2 py-1 bg-white border border-gray-300 rounded hover:bg-blue-50 hover:text-blue-600 text-xs transition-colors shadow-sm"
+                                                className={`ml-2 px-2 py-1 border rounded text-xs transition-colors shadow-sm ${isSpotActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:bg-blue-50 hover:text-blue-600'}`}
                                             >
                                                 <i className="fas fa-map-marker-alt mr-1"></i>
-                                                地圖
+                                                {isSpotActive ? '聚焦中' : '地圖'}
                                             </button>
                                         </div>
                                     </div>
@@ -608,54 +654,33 @@
             );
         };
 
-        // 3. Search Component (Spots Database)
+        // 3. Search Component (Spots Database) - Unchanged
         const SearchTab = ({ data, onSpotClick }) => {
             const [searchTerm, setSearchTerm] = useState("");
-
-            // Flatten and Sort spots
             const allSpots = useMemo(() => {
                 let spots = [];
                 data.forEach(day => {
                     day.spots.forEach(spot => {
-                        spots.push({ 
-                            ...spot, 
-                            day: day.day, 
-                            date: day.date, 
-                            city: day.city,
-                            country: getCountry(day.city) // Add country data
-                        });
+                        spots.push({ ...spot, day: day.day, date: day.date, city: day.city, country: getCountry(day.city) });
                     });
                 });
-                
-                // Sort logic: Country -> City -> Day
                 return spots.sort((a, b) => {
-                    // 1. Sort by Country
                     if (a.country !== b.country) return a.country.localeCompare(b.country, "zh-TW");
-                    // 2. Sort by City
                     if (a.city !== b.city) return a.city.localeCompare(b.city);
-                    // 3. Sort by Day index (maintain original order within same city)
                     return a.day - b.day;
                 });
             }, [data]);
-
             const filteredSpots = allSpots.filter(spot => 
                 spot.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                 spot.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                spot.country.includes(searchTerm) // Allow searching by country
+                spot.country.includes(searchTerm)
             );
-
             return (
                 <div className="h-full flex flex-col bg-white">
                     <div className="p-4 border-b bg-gray-50">
                         <div className="relative">
                             <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
-                            <input 
-                                type="text" 
-                                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="搜尋國家、城市、景點..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
+                            <input type="text" className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜尋國家、城市、景點..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
                         <div className="text-xs text-gray-500 mt-2 flex justify-between">
                             <span>收錄 {allSpots.length} 個地點 (依國家排序)</span>
@@ -666,44 +691,27 @@
                         {filteredSpots.length > 0 ? (
                             filteredSpots.map((spot, idx) => {
                                 const colorClass = getCategoryColor(spot.type);
-                                // Simulate Rating for demo
                                 const rating = spot.type === '景點' ? '🔥 必去' : spot.type === '餐飲' ? '👍 推薦' : '📍 一般';
-                                
                                 return (
-                                <div key={idx} 
-                                    className="bg-white border rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow flex justify-between items-center"
-                                    onClick={() => onSpotClick(spot)}
-                                >
+                                <div key={idx} className="bg-white border rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow flex justify-between items-center" onClick={() => onSpotClick(spot)}>
                                     <div>
-                                        <div className="text-xs text-gray-500 mb-1">
-                                            <span className="font-semibold text-blue-600">{spot.country}</span> · {spot.city} · Day {spot.day}
-                                        </div>
+                                        <div className="text-xs text-gray-500 mb-1"><span className="font-semibold text-blue-600">{spot.country}</span> · {spot.city} · Day {spot.day}</div>
                                         <h4 className="font-bold text-gray-800">{spot.name}</h4>
-                                        <div className="flex gap-2 mt-2">
-                                            <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{spot.type}</span>
-                                            <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded border border-yellow-100">{rating}</span>
-                                        </div>
+                                        <div className="flex gap-2 mt-2"><span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{spot.type}</span><span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded border border-yellow-100">{rating}</span></div>
                                     </div>
-                                    <div className={`w-8 h-8 rounded-full ${colorClass} text-white flex items-center justify-center shrink-0`}>
-                                        <i className="fas fa-map-marker-alt"></i>
-                                    </div>
+                                    <div className={`w-8 h-8 rounded-full ${colorClass} text-white flex items-center justify-center shrink-0`}><i className="fas fa-map-marker-alt"></i></div>
                                 </div>
                                 )
                             })
-                        ) : (
-                            <div className="text-center text-gray-400 mt-10">
-                                <i className="fas fa-ghost text-4xl mb-3"></i>
-                                <p>找不到相關景點</p>
-                            </div>
-                        )}
+                        ) : (<div className="text-center text-gray-400 mt-10"><i className="fas fa-ghost text-4xl mb-3"></i><p>找不到相關景點</p></div>)}
                     </div>
                 </div>
             );
         };
 
-        // 4. Winter Guide Component
+        // 4. Winter Guide Component - Unchanged
         const GuideTab = () => {
-            return (
+             return (
                 <div className="h-full overflow-y-auto bg-white p-5">
                     <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">冬季生存指南 <span className="text-sm font-normal text-gray-500 block mt-1">Winter Survival Guide</span></h2>
                     
@@ -784,32 +792,70 @@
         // 5. Main App Layout
         const App = () => {
             const [activeTab, setActiveTab] = useState('timeline'); // timeline, search, guide
-            // Changed default activeDayId from 1 to null so all are collapsed initially
             const [activeDayId, setActiveDayId] = useState(null); 
             const [activeSpot, setActiveSpot] = useState(null);
             const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Mobile header expansion state
 
             const activeDayData = itineraryData.find(d => d.day === activeDayId);
 
-            // Handler to switch to map view of a spot
-            const handleSpotClick = (spot) => {
-                setActiveSpot(spot);
-                // If spot has a day, switch to that day? Optional, but keeps context.
-                if (spot.day) {
-                    setActiveDayId(spot.day);
+            // Handler: Logic for List Header Clicks (The 3-Level Logic)
+            const handleDayHeaderClick = (dayId) => {
+                if (activeDayId === dayId) {
+                    if (activeSpot) {
+                        // Level 3 -> Level 2 (Clear spot, show day overview)
+                        setActiveSpot(null);
+                    } else {
+                        // Level 2 -> Level 1 (Collapse day, show trip overview)
+                        setActiveDayId(null);
+                    }
+                } else {
+                    // Level 1 -> Level 2 or Level 2 -> Level 2 (Switch day)
+                    setActiveDayId(dayId);
+                    setActiveSpot(null);
                 }
             };
+
+            // Handler: Logic for Spot Click (in List) -> Level 3
+            const handleSpotClick = (spot) => {
+                setActiveSpot(spot);
+                if (spot.day) setActiveDayId(spot.day);
+            };
+
+            // Handler: Logic for Map City Click (L1 -> L2)
+            const handleMapCityClick = (dayId) => {
+                setActiveDayId(dayId);
+                setActiveSpot(null);
+                setActiveTab('timeline'); // Ensure we are on timeline tab
+            };
+
+            // Handler: Logic for Map Marker Click (L2 -> L3)
+            const handleMapSpotMarkerClick = (spot) => {
+                setActiveSpot(spot);
+                // Also ensure day is active (should be already, but just in case)
+                if (spot.day && activeDayId !== spot.day) setActiveDayId(spot.day);
+            };
+
+            // Effect: Auto-scroll to Day or Spot when active state changes
+            useEffect(() => {
+                // We use a small timeout to let the DOM render the expanded list first
+                setTimeout(() => {
+                    if (activeDayId && !activeSpot) {
+                        // Scroll to Day Header
+                        const el = document.getElementById(`day-${activeDayId}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } 
+                    // Note: Scrolling to individual spot is tricky because we didn't add IDs to spots easily
+                    // but focusing on the Day is usually good enough for L2 transition.
+                }, 100);
+            }, [activeDayId]);
 
             return (
                 <div className="flex flex-col md:flex-row h-screen w-full">
                     
                     {/* Left Column Container (List & Tabs) */}
-                    {/* Mobile: Order 2 (Bottom), Height 70% */}
-                    {/* Desktop: Order 1 (Left), Height Full, Width 5/12 or 4/12 */}
-                    {/* Added upward shadow for separation on mobile */}
                     <div className="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full bg-white shadow-[0_-5px_15px_rgba(0,0,0,0.1)] md:shadow-xl z-20 flex flex-col relative order-2 md:order-1">
                         
-                        {/* Header - Mobile Collapsible Version */}
+                        {/* Header */}
                         <header 
                             className="px-3 py-2 md:px-4 md:py-3 bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-md shrink-0 z-30 transition-all cursor-pointer md:cursor-default"
                             onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
@@ -820,19 +866,14 @@
                                         <h1 className="text-sm md:text-base font-bold flex items-center leading-none">
                                             <i className="fas fa-snowflake mr-2 opacity-80 text-xs"></i>
                                             24天中歐冬季之旅
-                                            {/* Mobile: Chevron */}
                                             <i className={`fas fa-chevron-down md:hidden ml-2 text-[10px] transition-transform duration-300 ${isHeaderExpanded ? 'rotate-180' : ''}`}></i>
                                         </h1>
-
-                                        {/* Mobile: Day Indicator (Only show when collapsed AND when a day is selected) */}
                                         {!isHeaderExpanded && activeDayId && (
                                             <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 whitespace-nowrap">
                                                 Day {activeDayId}
                                             </span>
                                         )}
                                     </div>
-                                    
-                                    {/* Expanded Content (Mobile) or Always Visible (Desktop) */}
                                     <div className={`${isHeaderExpanded ? 'flex' : 'hidden'} md:flex mt-1 md:mt-1 transition-all justify-between items-center`}>
                                         <span className="text-[10px] text-blue-200">2026/02/07 - 03/02</span>
                                         <span className="bg-blue-800 px-2 py-0.5 rounded text-[10px] shadow-sm whitespace-nowrap border border-blue-600">
@@ -852,15 +893,8 @@
                                             key={day.day} 
                                             data={day} 
                                             isActive={activeDayId === day.day}
-                                            onClick={() => {
-                                                // Toggle logic: If clicking the active day, collapse it (set to null), otherwise expand it
-                                                if (activeDayId === day.day) {
-                                                    setActiveDayId(null);
-                                                } else {
-                                                    setActiveDayId(day.day);
-                                                }
-                                                setActiveSpot(null);
-                                            }}
+                                            activeSpot={activeSpot}
+                                            onClick={() => handleDayHeaderClick(day.day)}
                                             onSpotClick={handleSpotClick}
                                         />
                                     ))}
@@ -904,12 +938,16 @@
                     </div>
 
                     {/* Right Column: Map */}
-                    {/* Mobile: Order 1 (Top), Height 30% */}
-                    {/* Desktop: Order 2 (Right), Height Full */}
                     <div className="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full relative border-b md:border-b-0 md:border-l border-gray-300 order-1 md:order-2">
-                        <MapComponent activeDay={activeDayData} activeSpot={activeSpot} />
+                        <MapComponent 
+                            activeDay={activeDayData} 
+                            activeSpot={activeSpot} 
+                            fullItinerary={itineraryData} 
+                            onCityClick={handleMapCityClick}
+                            onSpotMarkerClick={handleMapSpotMarkerClick}
+                        />
                         
-                        {/* Map Overlay Info (Desktop Only) */}
+                        {/* Map Overlay Info */}
                         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg z-[400] max-w-xs hidden md:block border border-gray-200">
                             {activeDayData ? (
                                 <>
@@ -923,9 +961,10 @@
                                     )}
                                 </>
                             ) : (
-                                <div className="text-xs text-gray-500">
-                                    <i className="fas fa-mouse-pointer mr-1"></i>
-                                    請點擊左側列表查看詳細地圖
+                                <div className="text-xs text-gray-800">
+                                    <i className="fas fa-map mr-1 text-blue-600"></i>
+                                    <b>全覽模式</b>：顯示 24 天跨國移動軌跡
+                                    <p className="text-gray-500 mt-1 font-normal">點擊左側列表查看每日詳細行程</p>
                                 </div>
                             )}
                         </div>
