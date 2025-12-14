@@ -522,13 +522,19 @@
                    // Only fit bounds if NO specific spot is selected (Overview of Day).
                    // If a spot IS selected, the other useEffect handles the flyTo focus.
                    if (!activeSpot && markersRef.current.length > 0) {
-                        // FIX: Added animate: true and duration: 1.5 to make zoom out smooth
-                        map.fitBounds(group.getBounds(), { 
-                            padding: [50, 50], 
-                            maxZoom: 15,
-                            animate: true,
-                            duration: 1.5
-                        });
+                        const bounds = group.getBounds();
+                        if (bounds.isValid()) {
+                            // FIX: Use flyTo instead of fitBounds for smooth drone effect
+                            const targetCenter = bounds.getCenter();
+                            // Calculate zoom to fit bounds minus a small padding
+                            const targetZoom = map.getBoundsZoom(bounds) - 0.5;
+                            // Cap zoom to avoid getting too close if points are clustered
+                            const finalZoom = Math.min(targetZoom, 15);
+                            
+                            map.flyTo(targetCenter, finalZoom, { 
+                                duration: 1.5
+                            });
+                        }
                    }
 
                 } else if (fullItinerary) {
@@ -572,12 +578,13 @@
                     });
 
                     // 3. Fit Bounds
-                    // FIX: Added animate: true and duration: 1.5 to make full overview zoom smooth
-                    map.fitBounds(polyline.getBounds(), { 
-                        padding: [50, 50],
-                        animate: true,
-                        duration: 1.5
-                    });
+                    const bounds = polyline.getBounds();
+                    if (bounds.isValid()) {
+                        // FIX: Use flyTo for smooth overview transition
+                        const targetCenter = bounds.getCenter();
+                        const targetZoom = map.getBoundsZoom(bounds) - 0.5;
+                        map.flyTo(targetCenter, targetZoom, { duration: 1.5 });
+                    }
                 }
 
             }, [activeDay, activeSpot, fullItinerary]); // Dependencies
