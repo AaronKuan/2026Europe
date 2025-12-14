@@ -95,11 +95,26 @@
         };
 
         // Helper: Get Hex Color for Leaflet markers (Visual consistency with Tailwind classes)
+        // NOT used for background dots anymore, but kept for potential future use or overview mode
         const getCategoryColorHex = (type) => {
             if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280'; // gray-500
             if (type.includes('住宿')) return '#9333ea'; // purple-600
             if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return '#ef4444'; // red-500
             return '#2563eb'; // blue-600
+        };
+
+        // Helper: Get Color based on Day Index (5-color cycle)
+        // Used for background spots to distinguish days
+        const getDayColorHex = (day) => {
+            const colors = [
+                '#3b82f6', // Day 1, 6..: Blue
+                '#f97316', // Day 2, 7..: Orange
+                '#22c55e', // Day 3, 8..: Green
+                '#a855f7', // Day 4, 9..: Purple
+                '#ef4444'  // Day 5, 10..: Red
+            ];
+            // Adjust day to 0-based index for modulo
+            return colors[(day - 1) % 5];
         };
 
         // Helper: Get Country based on City
@@ -533,7 +548,6 @@
                             if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
                                 const isCurrentDay = day.day === activeDay.day;
                                 const isSelected = activeSpot && activeSpot.name === spot.name;
-                                const colorHex = getCategoryColorHex(spot.type);
                                 
                                 if (isCurrentDay) {
                                     // --- Main Actors: Big Numbered Icons ---
@@ -563,7 +577,8 @@
                                     group.addLayer(marker);
 
                                 } else {
-                                    // --- Supporting Cast: Small Colored Dots ---
+                                    // --- Supporting Cast: Small Colored Dots (Color by Day) ---
+                                    const colorHex = getDayColorHex(day.day); // USE DAY COLOR
                                     const circleMarker = L.circleMarker([spot.lat, spot.lng], {
                                         radius: 4,
                                         fillColor: colorHex,
@@ -573,7 +588,8 @@
                                         fillOpacity: 0.8,
                                         className: 'cursor-pointer'
                                     })
-                                    .bindTooltip(`${day.city}: ${spot.name}`, { direction: 'top', offset: [0, -5] }) // Tooltip on hover
+                                    // Tooltip clearly shows [Day X]
+                                    .bindTooltip(`[Day ${day.day}] ${day.city}: ${spot.name}`, { direction: 'top', offset: [0, -5] }) 
                                     .addTo(map)
                                     .on('click', () => {
                                         // Allow jumping to other days via map dots
@@ -582,10 +598,6 @@
                                     });
 
                                     markersRef.current.push(circleMarker);
-                                    // Note: We typically don't add background dots to the 'group' for fitBounds 
-                                    // to avoid zooming out too much when focusing on a day. 
-                                    // But if we want context, maybe? 
-                                    // Strategy: Only fit active day bounds, let others be background.
                                 }
                             }
                         });
@@ -652,6 +664,16 @@
                 }
 
             }, [activeDay, activeSpot, fullItinerary]); // Dependencies
+
+            // FlyTo Effect for specific spot interaction (only when single spot active)
+            useEffect(() => {
+                if (mapInstance.current && activeSpot) {
+                    const { lat, lng } = activeSpot;
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        mapInstance.current.flyTo([lat, lng], 15, { duration: 1.5 });
+                    }
+                }
+            }, [activeSpot]);
 
             return (
                 <div className="relative h-full w-full">
@@ -758,7 +780,7 @@
             );
         };
 
-        // 3. Search Component (Spots Database) - Unchanged
+        // 3. Search Component (Spots Database) - Modified
         const SearchTab = ({ data, onSpotClick }) => {
             const [searchTerm, setSearchTerm] = useState("");
             const allSpots = useMemo(() => {
@@ -794,16 +816,26 @@
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         {filteredSpots.length > 0 ? (
                             filteredSpots.map((spot, idx) => {
-                                const colorClass = getCategoryColor(spot.type);
                                 const rating = spot.type === '景點' ? '🔥 必去' : spot.type === '餐飲' ? '👍 推薦' : '📍 一般';
                                 return (
                                 <div key={idx} className="bg-white border rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow flex justify-between items-center" onClick={() => onSpotClick(spot)}>
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="text-xs text-gray-500 mb-1"><span className="font-semibold text-blue-600">{spot.country}</span> · {spot.city} · Day {spot.day}</div>
                                         <h4 className="font-bold text-gray-800">{spot.name}</h4>
                                         <div className="flex gap-2 mt-2"><span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{spot.type}</span><span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded border border-yellow-100">{rating}</span></div>
                                     </div>
-                                    <div className={`w-8 h-8 rounded-full ${colorClass} text-white flex items-center justify-center shrink-0`}><i className="fas fa-map-marker-alt"></i></div>
+                                    {/* MODIFIED: Replaced colored icon with functional Google Maps button */}
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            const query = encodeURIComponent(`${spot.name} ${spot.city}`);
+                                            window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                                        }}
+                                        className="ml-3 w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200 shrink-0"
+                                        title="在 Google Maps 開啟"
+                                    >
+                                        <i className="fas fa-map-location-dot text-base"></i>
+                                    </button>
                                 </div>
                                 )
                             })
