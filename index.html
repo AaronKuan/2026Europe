@@ -95,7 +95,6 @@
         };
 
         // Helper: Get Hex Color for Leaflet markers (Visual consistency with Tailwind classes)
-        // NOT used for background dots anymore, but kept for potential future use or overview mode
         const getCategoryColorHex = (type) => {
             if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280'; // gray-500
             if (type.includes('住宿')) return '#9333ea'; // purple-600
@@ -104,7 +103,6 @@
         };
 
         // Helper: Get Color based on Day Index (5-color cycle)
-        // Used for background spots to distinguish days
         const getDayColorHex = (day) => {
             const colors = [
                 '#3b82f6', // Day 1, 6..: Blue
@@ -113,7 +111,6 @@
                 '#a855f7', // Day 4, 9..: Purple
                 '#ef4444'  // Day 5, 10..: Red
             ];
-            // Adjust day to 0-based index for modulo
             return colors[(day - 1) % 5];
         };
 
@@ -156,9 +153,31 @@
                 tickets: "慕尼黑王宮聯票 (Residenz + Treasury)。交通使用 MVV Inner District 日票。",
                 notes: "週日商店大多關閉，但博物館與餐廳照常營業。",
                 spots: [
-                    { name: "慕尼黑王宮 (Residenz)", type: "景點", time: "09:30 | 3小時", trans: "U-Bahn U3/U6 至 Odeonsplatz", lat: 48.1402, lng: 11.5782 },
+                    { 
+                        name: "慕尼黑王宮 (Residenz)", type: "景點", time: "09:30 | 3小時", trans: "U-Bahn U3/U6 至 Odeonsplatz", lat: 48.1402, lng: 11.5782,
+                        details: {
+                            open: "09:00 - 17:00 (最後入場 16:00)",
+                            price: "€10 (博物館) / €15 (聯票)",
+                            images: [
+                                { title: "王宮外觀", url: "https://placehold.co/300x200/e2e8f0/475569?text=Residenz+Exterior" },
+                                { title: "古董大廳", url: "https://placehold.co/300x200/e2e8f0/475569?text=Antiquarium" },
+                                { title: "皇家珍寶館", url: "https://placehold.co/300x200/e2e8f0/475569?text=Treasury" }
+                            ]
+                        }
+                    },
                     { name: "英國花園 (Englischer Garten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行或巴士 100", lat: 48.1534, lng: 11.5925 },
-                    { name: "皇家啤酒屋 (Hofbräuhaus)", type: "餐飲", time: "18:00 | 2小時", trans: "步行", lat: 48.1375, lng: 11.5796 }
+                    { 
+                        name: "皇家啤酒屋 (Hofbräuhaus)", type: "餐飲", time: "18:00 | 2小時", trans: "步行", lat: 48.1375, lng: 11.5796,
+                        details: {
+                            open: "09:00 - 23:30 (每日營業)",
+                            price: "平均消費 €25 - €35",
+                            images: [
+                                { title: "招牌豬腳", url: "https://placehold.co/300x200/fee2e2/991b1b?text=Pork+Knuckle" },
+                                { title: "1公升啤酒", url: "https://placehold.co/300x200/fef3c7/92400e?text=Beer+Mass" },
+                                { title: "現場樂隊", url: "https://placehold.co/300x200/e2e8f0/475569?text=Live+Band" }
+                            ]
+                        }
+                    }
                 ]
             },
             {
@@ -172,7 +191,18 @@
                 notes: "冬季瑪麗安橋 (Marienbrücke) 可能因結冰封閉。務必注意火車班次。",
                 spots: [
                     { name: "慕尼黑中央車站", type: "交通", time: "08:30 | 出發", trans: "RE 列車 (約2小時)", lat: 48.1404, lng: 11.5600 },
-                    { name: "新天鵝堡 (Neuschwanstein)", type: "景點", time: "11:30 | 3小時", trans: "富森車站轉 Bus 73/78", lat: 47.5576, lng: 10.7498 },
+                    { 
+                        name: "新天鵝堡 (Neuschwanstein)", type: "景點", time: "11:30 | 3小時", trans: "富森車站轉 Bus 73/78", lat: 47.5576, lng: 10.7498,
+                        details: {
+                            open: "09:00 - 16:00 (需預約導覽)",
+                            price: "€17.50 (網上預訂費+門票)",
+                            images: [
+                                { title: "城堡全景", url: "https://placehold.co/300x200/e2e8f0/475569?text=Castle+View" },
+                                { title: "瑪麗安橋", url: "https://placehold.co/300x200/e2e8f0/475569?text=Marienbrücke" },
+                                { title: "內部導覽", url: "https://placehold.co/300x200/e2e8f0/475569?text=Interior+Tour" }
+                            ]
+                        }
+                    },
                     { name: "慕尼黑市區", type: "返回", time: "19:00 | 抵達", trans: "RE 列車", lat: 48.1351, lng: 11.5820 }
                 ]
             },
@@ -202,7 +232,18 @@
                 tickets: "使用薩爾斯堡卡 (包含纜車、要塞門票、莫札特故居)。",
                 notes: "冬季城堡纜車營運正常，但戶外風大請保暖。",
                 spots: [
-                    { name: "薩爾斯堡要塞 (Festung)", type: "景點", time: "09:30 | 2.5小時", trans: "Festungsbahn 纜車", lat: 47.7949, lng: 13.0475 },
+                    { 
+                        name: "薩爾斯堡要塞 (Festung)", type: "景點", time: "09:30 | 2.5小時", trans: "Festungsbahn 纜車", lat: 47.7949, lng: 13.0475,
+                        details: {
+                            open: "09:30 - 17:00",
+                            price: "€14.50 (基本) / 持卡免費",
+                            images: [
+                                { title: "纜車入口", url: "https://placehold.co/300x200/e2e8f0/475569?text=Funicular" },
+                                { title: "要塞觀景台", url: "https://placehold.co/300x200/e2e8f0/475569?text=View+Platform" },
+                                { title: "提線木偶", url: "https://placehold.co/300x200/e2e8f0/475569?text=Marionette" }
+                            ]
+                        }
+                    },
                     { name: "莫札特出生地", type: "景點", time: "13:00 | 1小時", trans: "步行", lat: 47.8000, lng: 13.0436 },
                     { name: "薩爾斯堡大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 47.7979, lng: 13.0450 }
                 ]
@@ -248,7 +289,18 @@
                 tickets: "美泉宮 Sisi Ticket 或 Grand Tour 需預約時段。",
                 notes: "情人節晚餐建議提前一個月預訂。",
                 spots: [
-                    { name: "美泉宮 (Schönbrunn)", type: "景點", time: "09:30 | 3.5小時", trans: "U-Bahn U4", lat: 48.1848, lng: 16.3122 },
+                    { 
+                        name: "美泉宮 (Schönbrunn)", type: "景點", time: "09:30 | 3.5小時", trans: "U-Bahn U4", lat: 48.1848, lng: 16.3122,
+                        details: {
+                            open: "08:00 - 17:00",
+                            price: "€29 (Grand Tour) / €24 (Imperial)",
+                            images: [
+                                { title: "皇宮正門", url: "https://placehold.co/300x200/e2e8f0/475569?text=Palace+Front" },
+                                { title: "海神噴泉", url: "https://placehold.co/300x200/e2e8f0/475569?text=Neptune+Fountain" },
+                                { title: "凱旋門 Gloriette", url: "https://placehold.co/300x200/e2e8f0/475569?text=Gloriette" }
+                            ]
+                        }
+                    },
                     { name: "聖史蒂芬大教堂", type: "景點", time: "14:30 | 1.5小時", trans: "U-Bahn U1/U3", lat: 48.2085, lng: 16.3738 },
                     { name: "葛拉本大街 (Graben)", type: "逛街", time: "16:00 | 2小時", trans: "步行", lat: 48.2088, lng: 16.3698 }
                 ]
@@ -309,7 +361,18 @@
                 tickets: "國會大廈務必提前官網預約導覽。溫泉自備泳衣拖鞋。",
                 notes: "國會大廈安檢嚴格。冬季泡露天溫泉是獨特體驗。",
                 spots: [
-                    { name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456 },
+                    { 
+                        name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456,
+                        details: {
+                            open: "08:00 - 16:00 (需預約)",
+                            price: "HU 10000 (非歐盟公民)",
+                            images: [
+                                { title: "多瑙河畔全景", url: "https://placehold.co/300x200/e2e8f0/475569?text=Parliament+View" },
+                                { title: "金碧輝煌樓梯", url: "https://placehold.co/300x200/e2e8f0/475569?text=Grand+Staircase" },
+                                { title: "王冠展示廳", url: "https://placehold.co/300x200/e2e8f0/475569?text=Crown+Jewels" }
+                            ]
+                        }
+                    },
                     { name: "塞切尼溫泉 (Széchenyi)", type: "體驗", time: "15:00 | 3小時", trans: "Metro M1 Széchenyi fürdő", lat: 47.5186, lng: 19.0822 },
                     { name: "英雄廣場", type: "景點", time: "18:00 | 0.5小時", trans: "步行", lat: 47.5138, lng: 19.0778 }
                 ]
@@ -369,7 +432,18 @@
                 tickets: "布拉格城堡 Circuit B (包含大教堂、舊皇宮、黃金巷)。",
                 notes: "進入城堡區需安檢。星巴克城堡店有絕佳觀景台。",
                 spots: [
-                    { name: "布拉格城堡 (Prague Castle)", type: "景點", time: "09:30 | 4小時", trans: "Tram 22 至 Pražský hrad", lat: 50.0909, lng: 14.4005 },
+                    { 
+                        name: "布拉格城堡 (Prague Castle)", type: "景點", time: "09:30 | 4小時", trans: "Tram 22 至 Pražský hrad", lat: 50.0909, lng: 14.4005,
+                        details: {
+                            open: "09:00 - 16:00 (冬季)",
+                            price: "CZK 250 (Circuit B)",
+                            images: [
+                                { title: "城堡區全景", url: "https://placehold.co/300x200/e2e8f0/475569?text=Castle+Panorama" },
+                                { title: "聖維特大教堂", url: "https://placehold.co/300x200/e2e8f0/475569?text=St.+Vitus" },
+                                { title: "黃金巷", url: "https://placehold.co/300x200/e2e8f0/475569?text=Golden+Lane" }
+                            ]
+                        }
+                    },
                     { name: "聖維特大教堂", type: "景點", time: "11:00 | 包含", trans: "步行", lat: 50.0906, lng: 14.4005 },
                     { name: "小城區 (Malá Strana)", type: "逛街", time: "15:00 | 2小時", trans: "步行下山", lat: 50.0883, lng: 14.4042 }
                 ]
@@ -724,8 +798,7 @@
                                         return (
                                         <div 
                                             key={idx} 
-                                            // ADDED: cursor-pointer and onClick handler for app-internal focus
-                                            className={`relative group transition-all duration-300 rounded-lg cursor-pointer ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm' : 'hover:bg-gray-100'}`}
+                                            className={`relative group transition-all duration-300 rounded-lg cursor-pointer ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm ring-1 ring-blue-100' : 'hover:bg-gray-100'}`}
                                             onClick={() => onSpotClick(spot)}
                                         >
                                             <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
@@ -745,11 +818,9 @@
                                                         </span>
                                                     </div>
                                                 </div>
-                                                {/* MODIFIED: Google Map External Link Button using Name + City query */}
                                                 <button 
                                                     onClick={(e) => { 
-                                                        e.stopPropagation(); // Prevent triggering the row click
-                                                        // Use encodeURIComponent to handle special characters and spaces correctly
+                                                        e.stopPropagation(); 
                                                         const query = encodeURIComponent(`${spot.name} ${data.city}`);
                                                         window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
                                                     }}
@@ -759,6 +830,35 @@
                                                     <i className="fas fa-map-location-dot text-sm"></i>
                                                 </button>
                                             </div>
+
+                                            {/* EXPANDABLE DETAILS SECTION */}
+                                            {spot.details && (
+                                                <div className={`overflow-hidden transition-[max-height] duration-500 ease-in-out ${isSpotActive ? 'max-h-96 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
+                                                    {/* Info Row */}
+                                                    <div className="grid grid-cols-2 gap-2 mb-3 text-xs bg-white rounded p-2 border border-gray-100">
+                                                        <div className="flex items-center text-gray-700">
+                                                            <i className="far fa-clock text-blue-500 w-5 text-center mr-1"></i>
+                                                            <span>{spot.details.open}</span>
+                                                        </div>
+                                                        <div className="flex items-center text-gray-700">
+                                                            <i className="fas fa-euro-sign text-amber-500 w-5 text-center mr-1"></i>
+                                                            <span>{spot.details.price}</span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Image Gallery (Horizontal Scroll) */}
+                                                    <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                                                        {spot.details.images.map((img, i) => (
+                                                            <div key={i} className="flex-none w-32 snap-start relative group/img">
+                                                                <img src={img.url} alt={img.title} className="w-full h-20 object-cover rounded shadow-sm border border-gray-200" />
+                                                                <div className="absolute inset-0 bg-black/40 flex items-end p-1 rounded opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                                                    <span className="text-[10px] text-white font-bold truncate w-full">{img.title}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                         );
                                     })}
