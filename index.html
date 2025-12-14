@@ -40,6 +40,15 @@
         .pb-safe {
             padding-bottom: env(safe-area-inset-bottom);
         }
+
+        /* --- Animations --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
     </style>
 </head>
 <body class="bg-gray-50 h-screen overflow-hidden">
@@ -470,52 +479,58 @@
                     polylineRef.current = null;
                 }
 
-                // Determine Mode
-                if (activeSpot) {
-                    // --- Level 3: Single Spot Mode ---
-                    const { lat, lng } = activeSpot;
-                    if(!isNaN(lat) && !isNaN(lng)) {
-                        const colorClass = getCategoryColor(activeSpot.type);
-                        const numberIcon = L.divIcon({
-                               className: 'custom-number-icon',
-                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 border-white text-white flex items-center justify-center font-bold shadow-md text-sm"><i class="fas fa-map-marker-alt"></i></div>`,
-                               iconSize: [32, 32],
-                               iconAnchor: [16, 16],
-                               popupAnchor: [0, -16]
-                        });
-                        const marker = L.marker([lat, lng], { icon: numberIcon })
-                               .bindPopup(`<b>${activeSpot.name}</b><br/>${activeSpot.type}<br/>${activeSpot.time}`)
-                               .addTo(map)
-                               .openPopup();
-                        markersRef.current.push(marker);
-                    }
-                } else if (activeDay && activeDay.spots) {
-                    // --- Level 2: Day Mode ---
+                // --- Level 2 & 3: Day Mode (Always show all spots for the day) ---
+                if (activeDay && activeDay.spots) {
                     const group = L.featureGroup();
                     activeDay.spots.forEach((spot, idx) => {
                        if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
+                           // Determine if this spot is the focused one
+                           const isSelected = activeSpot && activeSpot.name === spot.name;
                            const colorClass = getCategoryColor(spot.type);
+                           
+                           // Create Icon: Add yellow border and scale effect if selected
                            const numberIcon = L.divIcon({
                                className: 'custom-number-icon',
-                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 border-white text-white flex items-center justify-center font-bold shadow-md text-sm cursor-pointer">${idx + 1}</div>`,
+                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 ${isSelected ? 'border-yellow-400 scale-110' : 'border-white'} text-white flex items-center justify-center font-bold shadow-md text-sm cursor-pointer transition-transform">${idx + 1}</div>`,
                                iconSize: [32, 32],
                                iconAnchor: [16, 16],
                                popupAnchor: [0, -16]
                            });
-                           const marker = L.marker([spot.lat, spot.lng], { icon: numberIcon })
-                               .addTo(map)
-                               // Add click event for Map-to-List interaction
-                               .on('click', () => {
-                                   if(onSpotMarkerClick) onSpotMarkerClick(spot);
-                               });
+
+                           const marker = L.marker([spot.lat, spot.lng], { 
+                               icon: numberIcon,
+                               zIndexOffset: isSelected ? 1000 : 0 // Ensure selected marker is on top
+                           })
+                           .bindPopup(`<b>${spot.name}</b><br/>${spot.type}<br/>${spot.time}`)
+                           .addTo(map)
+                           // Add click event for Map-to-List interaction
+                           .on('click', () => {
+                               if(onSpotMarkerClick) onSpotMarkerClick(spot);
+                           });
+
+                           // Auto-open popup if selected
+                           if (isSelected) {
+                               marker.openPopup();
+                           }
 
                            markersRef.current.push(marker);
                            group.addLayer(marker);
                        }
                    });
-                   if (markersRef.current.length > 0) {
-                        map.fitBounds(group.getBounds(), { padding: [50, 50], maxZoom: 15 });
+
+                   // FIT BOUNDS STRATEGY:
+                   // Only fit bounds if NO specific spot is selected (Overview of Day).
+                   // If a spot IS selected, the other useEffect handles the flyTo focus.
+                   if (!activeSpot && markersRef.current.length > 0) {
+                        // FIX: Added animate: true and duration: 1.5 to make zoom out smooth
+                        map.fitBounds(group.getBounds(), { 
+                            padding: [50, 50], 
+                            maxZoom: 15,
+                            animate: true,
+                            duration: 1.5
+                        });
                    }
+
                 } else if (fullItinerary) {
                     // --- Level 1: Full View (Overview) Mode ---
                     // 1. Draw Polyline (Trajectory)
@@ -557,7 +572,12 @@
                     });
 
                     // 3. Fit Bounds
-                    map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+                    // FIX: Added animate: true and duration: 1.5 to make full overview zoom smooth
+                    map.fitBounds(polyline.getBounds(), { 
+                        padding: [50, 50],
+                        animate: true,
+                        duration: 1.5
+                    });
                 }
 
             }, [activeDay, activeSpot, fullItinerary]); // Dependencies
@@ -575,11 +595,11 @@
             return <div id="map" ref={mapRef} className="h-full w-full z-0"></div>;
         };
 
-        // 2. Sidebar Item (Day Card) - Existing
+        // 2. Sidebar Item (Day Card) - WITH ACCORDION ANIMATION
         const DayCard = ({ data, isActive, onClick, onSpotClick, activeSpot }) => {
             return (
                 <div 
-                    id={`day-${data.day}`} // Add ID for scrolling
+                    id={`day-${data.day}`} 
                     className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}
                 >
                     <div 
@@ -591,65 +611,67 @@
                             <h3 className="text-lg font-bold text-gray-800 mt-1">{data.title}</h3>
                         </div>
                         <div className="text-gray-400">
-                            {isActive ? <i className="fas fa-chevron-up"></i> : <i className="fas fa-chevron-down"></i>}
+                            <i className={`fas fa-chevron-down transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}></i>
                         </div>
                     </div>
 
-                    {isActive && (
-                        <div className="p-4 pt-0 text-sm text-gray-600 bg-gray-50/50">
-                            <div className="mb-4 bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
-                                <p className="font-semibold text-blue-800 mb-1"><i className="fas fa-info-circle mr-1"></i> 行程摘要</p>
-                                <p>{data.summary}</p>
-                            </div>
-                            <div className="space-y-6 relative pl-6 border-l-2 border-gray-200 ml-4">
-                                {data.spots.map((spot, idx) => {
-                                    const colorClass = getCategoryColor(spot.type);
-                                    const isSpotActive = activeSpot && activeSpot.name === spot.name; // Check if this spot is active
-
-                                    return (
-                                    <div key={idx} className={`relative group transition-colors rounded-lg ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm' : ''}`}>
-                                        <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
-                                            {idx + 1}
-                                        </div>
-                                        {/* Adjust margin if active to align text properly */}
-                                        <div className={`flex justify-between items-start ${isSpotActive ? 'pl-10' : ''}`}>
-                                            <div className="flex-1">
-                                                <h4 className={`font-bold text-base ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>
-                                                    {data.city} | {spot.name}
-                                                </h4>
-                                                <div className="flex flex-col mt-1 space-y-1">
-                                                     <span className="text-xs inline-flex items-center text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit">
-                                                        <i className="fas fa-clock mr-1.5 w-3"></i> {spot.time}
-                                                    </span>
-                                                    <span className="text-xs inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit">
-                                                        <i className="fas fa-train mr-1.5 w-3"></i> {spot.trans}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); onSpotClick(spot); }}
-                                                className={`ml-2 px-2 py-1 border rounded text-xs transition-colors shadow-sm ${isSpotActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:bg-blue-50 hover:text-blue-600'}`}
-                                            >
-                                                <i className="fas fa-map-marker-alt mr-1"></i>
-                                                {isSpotActive ? '聚焦中' : '地圖'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    );
-                                })}
-                            </div>
-                            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className="bg-amber-50 p-3 rounded border border-amber-100">
-                                    <h5 className="font-bold text-amber-700 mb-1 text-xs uppercase"><i className="fas fa-ticket-alt mr-1"></i> 票券策略</h5>
-                                    <p className="text-xs text-amber-900">{data.tickets}</p>
+                    {/* Accordion Animation Wrapper using CSS Grid */}
+                    <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isActive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                            <div className="p-4 pt-0 text-sm text-gray-600 bg-gray-50/50">
+                                <div className="mb-4 bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
+                                    <p className="font-semibold text-blue-800 mb-1"><i className="fas fa-info-circle mr-1"></i> 行程摘要</p>
+                                    <p>{data.summary}</p>
                                 </div>
-                                <div className="bg-purple-50 p-3 rounded border border-purple-100">
-                                    <h5 className="font-bold text-purple-700 mb-1 text-xs uppercase"><i className="fas fa-snowflake mr-1"></i> 冬季注意</h5>
-                                    <p className="text-xs text-purple-900">{data.notes}</p>
+                                <div className="space-y-6 relative pl-6 border-l-2 border-gray-200 ml-4">
+                                    {data.spots.map((spot, idx) => {
+                                        const colorClass = getCategoryColor(spot.type);
+                                        const isSpotActive = activeSpot && activeSpot.name === spot.name;
+
+                                        return (
+                                        <div key={idx} className={`relative group transition-all duration-300 rounded-lg ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm' : ''}`}>
+                                            <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
+                                                {idx + 1}
+                                            </div>
+                                            <div className={`flex justify-between items-start transition-all duration-300 ${isSpotActive ? 'pl-10' : ''}`}>
+                                                <div className="flex-1">
+                                                    <h4 className={`font-bold text-base transition-colors duration-300 ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>
+                                                        {data.city} | {spot.name}
+                                                    </h4>
+                                                    <div className="flex flex-col mt-1 space-y-1">
+                                                         <span className="text-xs inline-flex items-center text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit">
+                                                            <i className="fas fa-clock mr-1.5 w-3"></i> {spot.time}
+                                                        </span>
+                                                        <span className="text-xs inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit">
+                                                            <i className="fas fa-train mr-1.5 w-3"></i> {spot.trans}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); onSpotClick(spot); }}
+                                                    className={`ml-2 px-2 py-1 border rounded text-xs transition-all duration-300 shadow-sm ${isSpotActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300 hover:bg-blue-50 hover:text-blue-600'}`}
+                                                >
+                                                    <i className="fas fa-map-marker-alt mr-1"></i>
+                                                    {isSpotActive ? '聚焦中' : '地圖'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                                        <h5 className="font-bold text-amber-700 mb-1 text-xs uppercase"><i className="fas fa-ticket-alt mr-1"></i> 票券策略</h5>
+                                        <p className="text-xs text-amber-900">{data.tickets}</p>
+                                    </div>
+                                    <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                                        <h5 className="font-bold text-purple-700 mb-1 text-xs uppercase"><i className="fas fa-snowflake mr-1"></i> 冬季注意</h5>
+                                        <p className="text-xs text-purple-900">{data.notes}</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             );
         };
@@ -869,7 +891,7 @@
                                             <i className={`fas fa-chevron-down md:hidden ml-2 text-[10px] transition-transform duration-300 ${isHeaderExpanded ? 'rotate-180' : ''}`}></i>
                                         </h1>
                                         {!isHeaderExpanded && activeDayId && (
-                                            <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 whitespace-nowrap">
+                                            <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 whitespace-nowrap animate-fade-in">
                                                 Day {activeDayId}
                                             </span>
                                         )}
@@ -885,53 +907,56 @@
                         </header>
 
                         {/* Content Area (Scrollable) */}
-                        <div className="flex-1 overflow-hidden relative">
-                            {activeTab === 'timeline' && (
-                                <div className="h-full overflow-y-auto">
-                                    {itineraryData.map(day => (
-                                        <DayCard 
-                                            key={day.day} 
-                                            data={day} 
-                                            isActive={activeDayId === day.day}
-                                            activeSpot={activeSpot}
-                                            onClick={() => handleDayHeaderClick(day.day)}
-                                            onSpotClick={handleSpotClick}
-                                        />
-                                    ))}
-                                    <div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div>
-                                </div>
-                            )}
-                            
-                            {activeTab === 'search' && (
-                                <SearchTab data={itineraryData} onSpotClick={handleSpotClick} />
-                            )}
+                        <div className="flex-1 overflow-hidden relative bg-gray-50">
+                            {/* Wrap content in animated container with key for fade effect */}
+                            <div key={activeTab} className="h-full animate-fade-in">
+                                {activeTab === 'timeline' && (
+                                    <div className="h-full overflow-y-auto">
+                                        {itineraryData.map(day => (
+                                            <DayCard 
+                                                key={day.day} 
+                                                data={day} 
+                                                isActive={activeDayId === day.day}
+                                                activeSpot={activeSpot}
+                                                onClick={() => handleDayHeaderClick(day.day)}
+                                                onSpotClick={handleSpotClick}
+                                            />
+                                        ))}
+                                        <div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div>
+                                    </div>
+                                )}
+                                
+                                {activeTab === 'search' && (
+                                    <SearchTab data={itineraryData} onSpotClick={handleSpotClick} />
+                                )}
 
-                            {activeTab === 'guide' && (
-                                <GuideTab />
-                            )}
+                                {activeTab === 'guide' && (
+                                    <GuideTab />
+                                )}
+                            </div>
                         </div>
 
                         {/* Bottom Tab Navigation */}
                         <div className="bg-white border-t flex justify-around items-center h-16 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 pb-safe">
                             <button 
                                 onClick={() => setActiveTab('timeline')}
-                                className={`flex flex-col items-center justify-center w-full h-full ${activeTab === 'timeline' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'timeline' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                             >
-                                <i className="fas fa-list-ul text-lg mb-1"></i>
+                                <i className="fas fa-list-ul text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'timeline' ? 'scale-110' : ''}"></i>
                                 <span className="text-xs font-medium">每日行程</span>
                             </button>
                             <button 
                                 onClick={() => setActiveTab('search')}
-                                className={`flex flex-col items-center justify-center w-full h-full ${activeTab === 'search' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'search' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                             >
-                                <i className="fas fa-search text-lg mb-1"></i>
+                                <i className="fas fa-search text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'search' ? 'scale-110' : ''}"></i>
                                 <span className="text-xs font-medium">景點搜尋</span>
                             </button>
                             <button 
                                 onClick={() => setActiveTab('guide')}
-                                className={`flex flex-col items-center justify-center w-full h-full ${activeTab === 'guide' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'guide' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
                             >
-                                <i className="fas fa-book-open text-lg mb-1"></i>
+                                <i className="fas fa-book-open text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'guide' ? 'scale-110' : ''}"></i>
                                 <span className="text-xs font-medium">生存指南</span>
                             </button>
                         </div>
@@ -947,26 +972,29 @@
                             onSpotMarkerClick={handleMapSpotMarkerClick}
                         />
                         
-                        {/* Map Overlay Info */}
-                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg z-[400] max-w-xs hidden md:block border border-gray-200">
-                            {activeDayData ? (
-                                <>
-                                    <h4 className="text-sm font-bold text-gray-800">目前檢視：Day {activeDayId}</h4>
-                                    <p className="text-xs text-gray-600 mt-1">{activeDayData.city}</p>
-                                    {activeSpot && (
-                                        <div className="mt-2 pt-2 border-t border-gray-200">
-                                            <span className="text-xs font-bold text-blue-600">聚焦中：</span>
-                                            <span className="text-xs">{activeSpot.name}</span>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="text-xs text-gray-800">
-                                    <i className="fas fa-map mr-1 text-blue-600"></i>
-                                    <b>全覽模式</b>：顯示 24 天跨國移動軌跡
-                                    <p className="text-gray-500 mt-1 font-normal">點擊左側列表查看每日詳細行程</p>
-                                </div>
-                            )}
+                        {/* Map Overlay Info - With Animation */}
+                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg z-[400] max-w-xs hidden md:block border border-gray-200 transition-all duration-300 hover:shadow-xl">
+                            {/* Use Key to trigger re-animation on change */}
+                            <div key={activeDayId ? `day-${activeDayId}` : 'overview'} className="animate-fade-in">
+                                {activeDayData ? (
+                                    <>
+                                        <h4 className="text-sm font-bold text-gray-800">目前檢視：Day {activeDayId}</h4>
+                                        <p className="text-xs text-gray-600 mt-1">{activeDayData.city}</p>
+                                        {activeSpot && (
+                                            <div className="mt-2 pt-2 border-t border-gray-200 animate-fade-in">
+                                                <span className="text-xs font-bold text-blue-600">聚焦中：</span>
+                                                <span className="text-xs">{activeSpot.name}</span>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-xs text-gray-800">
+                                        <i className="fas fa-map mr-1 text-blue-600"></i>
+                                        <b>全覽模式</b>：顯示 24 天跨國移動軌跡
+                                        <p className="text-gray-500 mt-1 font-normal">點擊左側列表查看每日詳細行程</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
