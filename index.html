@@ -5,6 +5,1084 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>24天中歐冬季大眾運輸之旅 (2026)</title>
     
+    <!-- 
+        ★ 離線使用教學 (Offline Usage) ★
+        若您希望在飛機上或無網路環境使用，請執行以下步驟：
+        1. 下載以下檔案到此 html 同一層資料夾：
+           - leaflet.css, leaflet.js (從 https://unpkg.com/leaflet@1.9.4/dist/)
+           - tailwind.js (從 https://cdn.tailwindcss.com)
+           - react.production.min.js, react-dom.production.min.js
+           - babel.min.js
+        2. 修改下方的 <link> 與 <script> 標籤，將 href/src 改為本機檔名 (例如: src="leaflet.js")
+    -->
+
+    <!-- 1. Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <!-- 2. FontAwesome (Icon) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 3. Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; }
+        .leaflet-container { height: 100%; width: 100%; z-index: 10; }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        
+        /* Reset Leaflet DivIcon default background */
+        .leaflet-div-icon {
+            background: transparent;
+            border: none;
+        }
+        /* Mobile Safe Area for Bottom Navigation */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* --- Animations --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        
+        .offline-map-placeholder {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #f3f4f6;
+            z-index: 5;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
+
+    <!-- 4. React Core -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    
+    <!-- 5. React DOM -->
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- 6. Babel (for JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 7. Leaflet JS (Map) - Load strictly before React code executes -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // Helper: Get Color based on Type
+        const getCategoryColor = (type) => {
+            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return 'bg-gray-500';
+            if (type.includes('住宿')) return 'bg-purple-600';
+            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return 'bg-red-500';
+            return 'bg-blue-600';
+        };
+
+        // Helper: Get Country based on City
+        const getCountry = (city) => {
+             const map = {
+                'Munich': '德國', 'Füssen': '德國', 'Dresden': '德國', 'Berlin': '德國',
+                'Salzburg': '奧地利', 'Hallstatt': '奧地利', 'Vienna': '奧地利',
+                'Budapest': '匈牙利',
+                'Prague': '捷克', 'Cesky Krumlov': '捷克'
+            };
+            return map[city] || '其他';
+        };
+
+        // --- Data: 24 Days Itinerary ---
+        const itineraryData = [
+            // --- 德國：慕尼黑 (Days 1-3) ---
+            {
+                day: 1,
+                date: "02/07 (六)",
+                title: "抵達慕尼黑 | 巴伐利亞首府初探",
+                city: "Munich",
+                coordinates: [48.1351, 11.5820],
+                summary: "抵達慕尼黑機場 (MUC)，前往市區辦理入住，適應時差並享用晚餐。",
+                tickets: "購買機場城市快鐵票 (S-Bahn) 或 MVV Day Ticket。",
+                notes: "冬季日落約 17:15，建議早點 check-in。準備好保暖衣物。",
+                spots: [
+                    { name: "慕尼黑機場 (MUC)", type: "交通", time: "14:00 | 抵達", trans: "S-Bahn S1 或 S8 (約40分)", lat: 48.3536, lng: 11.7750 },
+                    { name: "慕尼黑中央車站周邊", type: "住宿", time: "16:00 | Check-in", trans: "步行", lat: 48.1404, lng: 11.5600 },
+                    { name: "瑪麗恩廣場 (Marienplatz)", type: "景點", time: "18:00 | 2小時", trans: "S-Bahn/U-Bahn 至 Marienplatz", lat: 48.1372, lng: 11.5755 }
+                ]
+            },
+            {
+                day: 2,
+                date: "02/08 (日)",
+                title: "慕尼黑 | 皇宮與啤酒文化",
+                city: "Munich",
+                coordinates: [48.1402, 11.5782],
+                summary: "參觀慕尼黑王宮，午後漫步英國花園，晚上體驗皇家啤酒屋。",
+                tickets: "慕尼黑王宮聯票 (Residenz + Treasury)。交通使用 MVV Inner District 日票。",
+                notes: "週日商店大多關閉，但博物館與餐廳照常營業。",
+                spots: [
+                    { name: "慕尼黑王宮 (Residenz)", type: "景點", time: "09:30 | 3小時", trans: "U-Bahn U3/U6 至 Odeonsplatz", lat: 48.1402, lng: 11.5782 },
+                    { name: "英國花園 (Englischer Garten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行或巴士 100", lat: 48.1534, lng: 11.5925 },
+                    { name: "皇家啤酒屋 (Hofbräuhaus)", type: "餐飲", time: "18:00 | 2小時", trans: "步行", lat: 48.1375, lng: 11.5796 }
+                ]
+            },
+            {
+                day: 3,
+                date: "02/09 (一)",
+                title: "富森 | 新天鵝堡一日遊",
+                city: "Füssen",
+                coordinates: [47.5576, 10.7498],
+                summary: "搭乘火車前往富森，轉乘巴士上山參觀童話城堡。",
+                tickets: "拜仁邦票 (Bayern Ticket) 最划算。城堡門票需提前一個月官網預訂。",
+                notes: "冬季瑪麗安橋 (Marienbrücke) 可能因結冰封閉。務必注意火車班次。",
+                spots: [
+                    { name: "慕尼黑中央車站", type: "交通", time: "08:30 | 出發", trans: "RE 列車 (約2小時)", lat: 48.1404, lng: 11.5600 },
+                    { name: "新天鵝堡 (Neuschwanstein)", type: "景點", time: "11:30 | 3小時", trans: "富森車站轉 Bus 73/78", lat: 47.5576, lng: 10.7498 },
+                    { name: "慕尼黑市區", type: "返回", time: "19:00 | 抵達", trans: "RE 列車", lat: 48.1351, lng: 11.5820 }
+                ]
+            },
+            // --- 奧地利：薩爾斯堡 (Days 4-6) ---
+            {
+                day: 4,
+                date: "02/10 (二)",
+                title: "移動日 | 前往薩爾斯堡",
+                city: "Salzburg",
+                coordinates: [47.8095, 13.0550],
+                summary: "早晨搭火車跨國前往奧地利薩爾斯堡，下午遊覽米拉貝爾宮。",
+                tickets: "使用拜仁邦票 (可涵蓋至 Salzburg Hbf) 或預購 DB/ÖBB 早鳥票。",
+                notes: "薩爾斯堡卡 (Salzburg Card) 極力推薦，包含交通與景點。",
+                spots: [
+                    { name: "慕尼黑 -> 薩爾斯堡", type: "交通", time: "09:00 | 1.5-2小時", trans: "Meridian (M) 或 RJX 火車", lat: 47.8129, lng: 13.0454 },
+                    { name: "米拉貝爾宮 (Mirabellgarten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行", lat: 47.8055, lng: 13.0416 },
+                    { name: "糧食胡同 (Getreidegasse)", type: "逛街", time: "16:30 | 2小時", trans: "步行過橋", lat: 47.7997, lng: 13.0425 }
+                ]
+            },
+            {
+                day: 5,
+                date: "02/11 (三)",
+                title: "薩爾斯堡 | 要塞與莫札特",
+                city: "Salzburg",
+                coordinates: [47.7949, 13.0475],
+                summary: "登上薩爾斯堡要塞俯瞰雪景，參觀莫札特出生地。",
+                tickets: "使用薩爾斯堡卡 (包含纜車、要塞門票、莫札特故居)。",
+                notes: "冬季城堡纜車營運正常，但戶外風大請保暖。",
+                spots: [
+                    { name: "薩爾斯堡要塞 (Festung)", type: "景點", time: "09:30 | 2.5小時", trans: "Festungsbahn 纜車", lat: 47.7949, lng: 13.0475 },
+                    { name: "莫札特出生地", type: "景點", time: "13:00 | 1小時", trans: "步行", lat: 47.8000, lng: 13.0436 },
+                    { name: "薩爾斯堡大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 47.7979, lng: 13.0450 }
+                ]
+            },
+            {
+                day: 6,
+                date: "02/12 (四)",
+                title: "哈修塔特 | 世界最美小鎮一日遊",
+                city: "Hallstatt",
+                coordinates: [47.5622, 13.6493],
+                summary: "大眾運輸挑戰：巴士轉火車轉船，探訪湖畔小鎮。",
+                tickets: "巴士上車購票或 OBB App 買全程票。渡輪現金支付。",
+                notes: "冬季鹽礦關閉(通常1-2月)，重點在湖景與天空步道(若開放)。末班車較早，務必 16:30 前離開。",
+                spots: [
+                    { name: "薩爾斯堡 -> 哈修塔特", type: "交通", time: "08:15 | 2.5小時", trans: "Bus 150 -> Bad Ischl -> Train -> Ferry", lat: 47.5622, lng: 13.6493 },
+                    { name: "哈修塔特明信片觀景點", type: "景點", time: "11:30 | 1小時", trans: "步行", lat: 47.5645, lng: 13.6506 },
+                    { name: "集市廣場 (Marktplatz)", type: "景點", time: "13:30 | 2小時", trans: "步行", lat: 47.5620, lng: 13.6490 }
+                ]
+            },
+            // --- 奧地利：維也納 (Days 7-10) ---
+            {
+                day: 7,
+                date: "02/13 (五)",
+                title: "移動日 | 前往音樂之都維也納",
+                city: "Vienna",
+                coordinates: [48.1851, 16.3762],
+                summary: "搭乘 Railjet 高速列車前往維也納，入住中央車站附近。",
+                tickets: "ÖBB Railjet 預售票 (Sparschiene)。維也納交通週票 (Wochenkarte) 或 72hr 券。",
+                notes: "維也納中央車站 (Wien Hbf) 生活機能強，超市多。",
+                spots: [
+                    { name: "薩爾斯堡 -> 維也納", type: "交通", time: "09:08 | 2.5小時", trans: "ÖBB Railjet (RJX)", lat: 48.1851, lng: 16.3762 },
+                    { name: "貝爾维德宮 (Belvedere)", type: "景點", time: "14:00 | 2.5小時", trans: "步行或電車 D 線", lat: 48.1915, lng: 16.3809 },
+                    { name: "卡爾教堂 (Karlskirche)", type: "景點", time: "17:00 | 1小時", trans: "U-Bahn U1", lat: 48.1982, lng: 16.3718 }
+                ]
+            },
+            {
+                day: 8,
+                date: "02/14 (六)",
+                title: "維也納 | 熊布朗宮與市區",
+                city: "Vienna",
+                coordinates: [48.1848, 16.3122],
+                summary: "參觀美泉宮 (熊布朗宮)，下午回到內城區逛街。",
+                tickets: "美泉宮 Sisi Ticket 或 Grand Tour 需預約時段。",
+                notes: "情人節晚餐建議提前一個月預訂。",
+                spots: [
+                    { name: "美泉宮 (Schönbrunn)", type: "景點", time: "09:30 | 3.5小時", trans: "U-Bahn U4", lat: 48.1848, lng: 16.3122 },
+                    { name: "聖史蒂芬大教堂", type: "景點", time: "14:30 | 1.5小時", trans: "U-Bahn U1/U3", lat: 48.2085, lng: 16.3738 },
+                    { name: "葛拉本大街 (Graben)", type: "逛街", time: "16:00 | 2小時", trans: "步行", lat: 48.2088, lng: 16.3698 }
+                ]
+            },
+            {
+                day: 9,
+                date: "02/15 (日)",
+                title: "維也納 | 藝術史與咖啡館",
+                city: "Vienna",
+                coordinates: [48.2038, 16.3617],
+                summary: "沉浸在藝術史博物館，下午體驗維也納咖啡文化。",
+                tickets: "藝術史博物館門票。",
+                notes: "中央咖啡館 (Café Central) 經常排隊，可改去 Café Sperl。",
+                spots: [
+                    { name: "藝術史博物館", type: "景點", time: "10:00 | 3小時", trans: "U-Bahn U2/U3", lat: 48.2038, lng: 16.3617 },
+                    { name: "霍夫堡皇宮 (Hofburg)", type: "景點", time: "14:00 | 2小時", trans: "步行", lat: 48.2056, lng: 16.3653 },
+                    { name: "中央咖啡館", type: "餐飲", time: "16:30 | 1.5小時", trans: "步行", lat: 48.2104, lng: 16.3654 }
+                ]
+            },
+            {
+                day: 10,
+                date: "02/16 (一)",
+                title: "移動日 | 前往布達佩斯",
+                city: "Budapest",
+                coordinates: [47.5005, 19.0837],
+                summary: "搭火車跨越國界前往匈牙利布達佩斯。",
+                tickets: "ÖBB 或 MÁV 官網購票。布達佩斯購買 72hr Travel Card。",
+                notes: "注意布達佩斯有不同火車站 (Keleti/Nyugati)，確認車票。",
+                spots: [
+                    { name: "維也納 -> 布達佩斯", type: "交通", time: "10:40 | 2.5小時", trans: "ÖBB Railjet -> Budapest-Keleti", lat: 47.5005, lng: 19.0837 },
+                    { name: "紐約咖啡館 (New York Café)", type: "餐飲", time: "15:00 | 1.5小時", trans: "Bus/Tram/Metro", lat: 47.4985, lng: 19.0705 },
+                    { name: "多瑙河遊船", type: "體驗", time: "19:00 | 1小時", trans: "Tram 2", lat: 47.4967, lng: 19.0494 }
+                ]
+            },
+            // --- 匈牙利：布達佩斯 (Days 11-13) ---
+            {
+                day: 11,
+                date: "02/17 (二)",
+                title: "布達佩斯 | 布達區歷史漫步",
+                city: "Budapest",
+                coordinates: [47.5020, 19.0348],
+                summary: "探索多瑙河西岸的布達城堡區，俯瞰城市全景。",
+                tickets: "馬提亞斯教堂門票，漁人堡上層需票(冬季有時免費)。",
+                notes: "Bus 16 可直接上城堡山。",
+                spots: [
+                    { name: "漁人堡 (Fisherman's Bastion)", type: "景點", time: "09:30 | 1.5小時", trans: "Bus 16", lat: 47.5020, lng: 19.0348 },
+                    { name: "馬提亞斯教堂", type: "景點", time: "11:00 | 1小時", trans: "步行", lat: 47.5019, lng: 19.0342 },
+                    { name: "布達皇宮 (Buda Castle)", type: "景點", time: "14:00 | 2小時", trans: "步行或纜車", lat: 47.4962, lng: 19.0396 }
+                ]
+            },
+            {
+                day: 12,
+                date: "02/18 (三)",
+                title: "布達佩斯 | 佩斯區與溫泉",
+                city: "Budapest",
+                coordinates: [47.5076, 19.0456],
+                summary: "參觀宏偉的國會大廈，下午享受著名的塞切尼溫泉。",
+                tickets: "國會大廈務必提前官網預約導覽。溫泉自備泳衣拖鞋。",
+                notes: "國會大廈安檢嚴格。冬季泡露天溫泉是獨特體驗。",
+                spots: [
+                    { name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456 },
+                    { name: "塞切尼溫泉 (Széchenyi)", type: "體驗", time: "15:00 | 3小時", trans: "Metro M1 Széchenyi fürdő", lat: 47.5186, lng: 19.0822 },
+                    { name: "英雄廣場", type: "景點", time: "18:00 | 0.5小時", trans: "步行", lat: 47.5138, lng: 19.0778 }
+                ]
+            },
+             {
+                day: 13,
+                date: "02/19 (四)",
+                title: "布達佩斯 | 中央市場與漫遊",
+                city: "Budapest",
+                coordinates: [47.4870, 19.0585],
+                summary: "探索當地美食，購買伴手禮，漫步瓦茨街。",
+                tickets: "無特殊門票。",
+                notes: "中央市場二樓有熟食攤販，適合午餐。",
+                spots: [
+                    { name: "中央市場 (Great Market Hall)", type: "逛街", time: "10:00 | 2小時", trans: "Tram 47/49", lat: 47.4870, lng: 19.0585 },
+                    { name: "瓦茨街 (Váci utca)", type: "逛街", time: "14:00 | 2小時", trans: "步行", lat: 47.4933, lng: 19.0523 },
+                    { name: "自由橋 (Liberty Bridge)", type: "景點", time: "16:30 | 0.5小時", trans: "步行", lat: 47.4856, lng: 19.0547 }
+                ]
+            },
+            // --- 捷克：布拉格 (Days 14-18) ---
+            {
+                day: 14,
+                date: "02/20 (五)",
+                title: "移動日 | 前往布拉格",
+                city: "Prague",
+                coordinates: [50.0835, 14.4362],
+                summary: "長途移動日，搭火車前往捷克布拉格。",
+                tickets: "MÁV 或 CD (捷克國鐵) 訂票。布拉格使用 PID 票券。",
+                notes: "車程較長 (約 7 小時)，建議準備午餐上車。抵達站通常為 Praha hl.n.。",
+                spots: [
+                    { name: "布達佩斯 -> 布拉格", type: "交通", time: "09:30 | 7小時", trans: "EC 列車 (經 Bratislava/Brno)", lat: 50.0835, lng: 14.4362 },
+                    { name: "瓦茨拉夫廣場", type: "景點", time: "17:30 | 1小時", trans: "步行/Metro", lat: 50.0813, lng: 14.4280 }
+                ]
+            },
+            {
+                day: 15,
+                date: "02/21 (六)",
+                title: "布拉格 | 老城區經典",
+                city: "Prague",
+                coordinates: [50.0877, 14.4211],
+                summary: "走訪天文鐘、老城廣場與查理大橋。",
+                tickets: "老城市政廳登塔票。",
+                notes: "查理大橋清晨或深夜人最少，氣氛最佳。",
+                spots: [
+                    { name: "老城廣場 (Old Town Square)", type: "景點", time: "09:30 | 2小時", trans: "步行", lat: 50.0877, lng: 14.4211 },
+                    { name: "天文鐘 (Astronomical Clock)", type: "景點", time: "11:00 | 0.5小時", trans: "步行", lat: 50.0870, lng: 14.4207 },
+                    { name: "查理大橋 (Charles Bridge)", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 50.0865, lng: 14.4114 }
+                ]
+            },
+            {
+                day: 16,
+                date: "02/22 (日)",
+                title: "布拉格 | 城堡區巡禮",
+                city: "Prague",
+                coordinates: [50.0909, 14.4005],
+                summary: "世界最大古堡群，包含聖維特大教堂與黃金巷。",
+                tickets: "布拉格城堡 Circuit B (包含大教堂、舊皇宮、黃金巷)。",
+                notes: "進入城堡區需安檢。星巴克城堡店有絕佳觀景台。",
+                spots: [
+                    { name: "布拉格城堡 (Prague Castle)", type: "景點", time: "09:30 | 4小時", trans: "Tram 22 至 Pražský hrad", lat: 50.0909, lng: 14.4005 },
+                    { name: "聖維特大教堂", type: "景點", time: "11:00 | 包含", trans: "步行", lat: 50.0906, lng: 14.4005 },
+                    { name: "小城區 (Malá Strana)", type: "逛街", time: "15:00 | 2小時", trans: "步行下山", lat: 50.0883, lng: 14.4042 }
+                ]
+            },
+            {
+                day: 17,
+                date: "02/23 (一)",
+                title: "庫倫洛夫 | CK 小鎮一日遊",
+                city: "Cesky Krumlov",
+                coordinates: [48.8105, 14.3142],
+                summary: "搭乘巴士當日往返這座被伏爾塔瓦河環繞的中世紀小鎮。",
+                tickets: "RegioJet 或 FlixBus 巴士票 (務必來回先買好)。",
+                notes: "小鎮為石板路，若有積雪請穿防滑鞋。從巴士站到市區需步行約15分。",
+                spots: [
+                    { name: "布拉格 -> CK 小鎮", type: "交通", time: "08:00 | 3小時", trans: "RegioJet Bus (Na Knížecí 站發車)", lat: 48.8105, lng: 14.3142 },
+                    { name: "CK 城堡與彩繪塔", type: "景點", time: "11:30 | 2小時", trans: "步行", lat: 48.8126, lng: 14.3130 },
+                    { name: "舊城廣場", type: "景點", time: "14:00 | 2小時", trans: "步行", lat: 48.8107, lng: 14.3152 },
+                    { name: "返回布拉格", type: "交通", time: "17:00 | 3小時", trans: "Bus", lat: 50.0682, lng: 14.4053 }
+                ]
+            },
+            {
+                day: 18,
+                date: "02/24 (二)",
+                title: "布拉格 | 文青與高堡",
+                city: "Prague",
+                coordinates: [50.0645, 14.4179],
+                summary: "上午拜訪會跳舞的房子，下午至高堡區俯瞰伏爾塔瓦河。",
+                tickets: "高堡區主要免費，教堂需門票。",
+                notes: "高堡區遊客較少，視野極佳。",
+                spots: [
+                    { name: "跳舞的房子", type: "景點", time: "10:00 | 0.5小時", trans: "Tram 17", lat: 50.0754, lng: 14.4141 },
+                    { name: "高堡 (Vyšehrad)", type: "景點", time: "14:00 | 2.5小時", trans: "Metro C 至 Vyšehrad", lat: 50.0645, lng: 14.4179 }
+                ]
+            },
+             // --- 德國：德勒斯登/柏林 (Days 19-24) ---
+            {
+                day: 19,
+                date: "02/25 (三)",
+                title: "移動日 | 經德勒斯登至柏林",
+                city: "Dresden",
+                coordinates: [51.0504, 13.7373],
+                summary: "從布拉格出發，中停「易北河畔的佛羅倫斯」德勒斯登半日，晚間抵達柏林。",
+                tickets: "DB/CD 跨國火車票 (買 Prague -> Berlin，部分票種允許中停，或分段買)。",
+                notes: "德勒斯登車站有置物櫃可放行李。",
+                spots: [
+                    { name: "布拉格 -> 德勒斯登", type: "交通", time: "08:30 | 2.5小時", trans: "EC 列車", lat: 51.0406, lng: 13.7314 },
+                    { name: "聖母教堂 (Frauenkirche)", type: "景點", time: "12:00 | 1小時", trans: "步行", lat: 51.0519, lng: 13.7415 },
+                    { name: "茲溫格宮 (Zwinger)", type: "景點", time: "14:00 | 1小時", trans: "步行", lat: 51.0529, lng: 13.7337 },
+                    { name: "德勒斯登 -> 柏林", type: "交通", time: "17:00 | 2小時", trans: "IC/EC 列車", lat: 52.5200, lng: 13.4050 }
+                ]
+            },
+            {
+                day: 20,
+                date: "02/26 (四)",
+                title: "柏林 | 歷史的傷痕",
+                city: "Berlin",
+                coordinates: [52.5163, 13.3777],
+                summary: "參觀布蘭登堡門、國會大廈與歐洲被害猶太人紀念碑。",
+                tickets: "國會大廈穹頂 **必須** 提前官網免費預約。",
+                notes: "柏林交通分區 ABC，市區買 AB 區即可。",
+                spots: [
+                    { name: "布蘭登堡門", type: "景點", time: "09:30 | 1小時", trans: "S-Bahn Brandenburger Tor", lat: 52.5163, lng: 13.3777 },
+                    { name: "國會大廈 (Reichstag)", type: "景點", time: "11:00 | 1.5小時", trans: "步行", lat: 52.5186, lng: 13.3761 },
+                    { name: "猶太人紀念碑", type: "景點", time: "14:00 | 1小時", trans: "步行", lat: 52.5139, lng: 13.3815 }
+                ]
+            },
+            {
+                day: 21,
+                date: "02/27 (五)",
+                title: "柏林 | 博物館島文化巡禮",
+                city: "Berlin",
+                coordinates: [52.5208, 13.3975],
+                summary: "全日探索世界遺產博物館島，重點在佩加蒙與新博物館。",
+                tickets: "博物館島聯票 (Museum Island Pass)。",
+                notes: "佩加蒙博物館(Pergamon)部分整修中，需確認開放區域。新博物館必看娜芙蒂蒂像。",
+                spots: [
+                    { name: "博物館島", type: "景點", time: "10:00 | 4小時", trans: "Bus 100/200 或 U5", lat: 52.5195, lng: 13.3996 },
+                    { name: "柏林大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 52.5190, lng: 13.4010 },
+                    { name: "亞歷山大廣場", type: "逛街", time: "17:00 | 1.5小時", trans: "步行", lat: 52.5219, lng: 13.4132 }
+                ]
+            },
+            {
+                day: 22,
+                date: "02/28 (六)",
+                title: "柏林 | 冷戰圍牆與現代藝術",
+                city: "Berlin",
+                coordinates: [52.5055, 13.4395],
+                summary: "走訪東邊畫廊 (柏林圍牆) 與查理檢查哨。",
+                tickets: "無特殊門票，博物館需另購。",
+                notes: "東邊畫廊是戶外區域，注意保暖。",
+                spots: [
+                    { name: "東邊畫廊 (East Side Gallery)", type: "景點", time: "10:00 | 1.5小時", trans: "S-Bahn Ostbahnhof", lat: 52.5055, lng: 13.4395 },
+                    { name: "查理檢查哨", type: "景點", time: "13:00 | 1小時", trans: "U6 Kochstr.", lat: 52.5074, lng: 13.3904 },
+                    { name: "波茲坦廣場", type: "景點", time: "15:30 | 1.5小時", trans: "U2/S-Bahn", lat: 52.5096, lng: 13.3759 }
+                ]
+            },
+            {
+                day: 23,
+                date: "03/01 (日)",
+                title: "柏林 | 購物與最後巡禮",
+                city: "Berlin",
+                coordinates: [52.5036, 13.3353],
+                summary: "選購庫達姆大道精品或紀念品，準備返程。",
+                tickets: "交通票。",
+                notes: "週日商店大多休息！建議安排跳蚤市場 (如 Mauerpark) 或純觀光。",
+                spots: [
+                    { name: "Mauerpark 跳蚤市場", type: "體驗", time: "10:00 | 3小時", trans: "U2 Eberswalder Str.", lat: 52.5435, lng: 13.4024 },
+                    { name: "夏洛滕堡宮", type: "景點", time: "14:30 | 2小時", trans: "Bus M45", lat: 52.5208, lng: 13.2956 }
+                ]
+            },
+            {
+                day: 24,
+                date: "03/02 (一)",
+                title: "返程 | 柏林機場",
+                city: "Berlin",
+                coordinates: [52.3667, 13.5033],
+                summary: "前往柏林布蘭登堡機場 (BER)，結束美好旅程。",
+                tickets: "ABC 區車票 (含機場)。",
+                notes: "請提早 3 小時抵達機場辦理退稅與登機。",
+                spots: [
+                    { name: "柏林市區 -> 機場", type: "交通", time: "09:00 | 45分", trans: "FEX 機場快線或 S9", lat: 52.5200, lng: 13.4050 },
+                    { name: "柏林布蘭登堡機場 (BER)", type: "搭機", time: "13:00 | 飛離", trans: "-", lat: 52.3667, lng: 13.5033 }
+                ]
+            }
+        ];
+
+        // --- Components ---
+
+        // 1. Map Component (Using Raw Leaflet)
+        const MapComponent = ({ activeSpot, activeDay, fullItinerary, onCityClick, onSpotMarkerClick }) => {
+            const mapRef = useRef(null);
+            const mapInstance = useRef(null);
+            const markersRef = useRef([]);
+            const polylineRef = useRef(null);
+
+            // Init Map
+            useEffect(() => {
+                // Safety check: if L is not defined, wait a bit or return.
+                // In online mode, L should be defined by the script tag above.
+                if (typeof L === 'undefined') {
+                    console.error("Leaflet is not loaded yet.");
+                    return;
+                }
+
+                if (!mapInstance.current && mapRef.current) {
+                    mapInstance.current = L.map(mapRef.current).setView([48.1351, 11.5820], 6);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                        subdomains: 'abcd',
+                        maxZoom: 19
+                    }).addTo(mapInstance.current);
+                }
+            }, []);
+
+            // Update Map View & Markers based on Active Day or Full View
+            useEffect(() => {
+                if (!mapInstance.current || typeof L === 'undefined') return;
+
+                const map = mapInstance.current;
+                
+                // Clear old markers and lines
+                markersRef.current.forEach(m => map.removeLayer(m));
+                markersRef.current = [];
+                if (polylineRef.current) {
+                    map.removeLayer(polylineRef.current);
+                    polylineRef.current = null;
+                }
+
+                // --- Level 2 & 3: Day Mode (Always show all spots for the day) ---
+                if (activeDay && activeDay.spots) {
+                    const group = L.featureGroup();
+                    activeDay.spots.forEach((spot, idx) => {
+                       if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
+                           // Determine if this spot is the focused one
+                           const isSelected = activeSpot && activeSpot.name === spot.name;
+                           const colorClass = getCategoryColor(spot.type);
+                           
+                           // Create Icon: Add yellow border and scale effect if selected
+                           const numberIcon = L.divIcon({
+                               className: 'custom-number-icon',
+                               html: `<div class="w-8 h-8 ${colorClass} rounded-full border-2 ${isSelected ? 'border-yellow-400 scale-110' : 'border-white'} text-white flex items-center justify-center font-bold shadow-md text-sm cursor-pointer transition-transform">${idx + 1}</div>`,
+                               iconSize: [32, 32],
+                               iconAnchor: [16, 16],
+                               popupAnchor: [0, -16]
+                           });
+
+                           const marker = L.marker([spot.lat, spot.lng], { 
+                               icon: numberIcon,
+                               zIndexOffset: isSelected ? 1000 : 0 // Ensure selected marker is on top
+                           })
+                           .bindPopup(`<b>${spot.name}</b><br/>${spot.type}<br/>${spot.time}`)
+                           .addTo(map)
+                           // Add click event for Map-to-List interaction
+                           .on('click', () => {
+                               if(onSpotMarkerClick) onSpotMarkerClick(spot);
+                           });
+
+                           // Auto-open popup if selected
+                           if (isSelected) {
+                               marker.openPopup();
+                           }
+
+                           markersRef.current.push(marker);
+                           group.addLayer(marker);
+                       }
+                   });
+
+                   // FIT BOUNDS STRATEGY:
+                   // Only fit bounds if NO specific spot is selected (Overview of Day).
+                   // If a spot IS selected, the other useEffect handles the flyTo focus.
+                   if (!activeSpot && markersRef.current.length > 0) {
+                        const bounds = group.getBounds();
+                        if (bounds.isValid()) {
+                            // FIX: Use flyTo instead of fitBounds for smooth drone effect
+                            const targetCenter = bounds.getCenter();
+                            // Calculate zoom to fit bounds minus a small padding
+                            const targetZoom = map.getBoundsZoom(bounds) - 0.5;
+                            // Cap zoom to avoid getting too close if points are clustered
+                            const finalZoom = Math.min(targetZoom, 15);
+                            
+                            map.flyTo(targetCenter, finalZoom, { 
+                                duration: 1.5
+                            });
+                        }
+                   }
+
+                } else if (fullItinerary) {
+                    // --- Level 1: Full View (Overview) Mode ---
+                    // 1. Draw Polyline (Trajectory)
+                    const trajectory = fullItinerary.map(d => d.coordinates);
+                    const polyline = L.polyline(trajectory, { 
+                        color: '#2563eb', // Blue-600
+                        weight: 3, 
+                        dashArray: '8, 8', // Dashed line for movement
+                        opacity: 0.6 
+                    }).addTo(map);
+                    polylineRef.current = polyline;
+
+                    // 2. Draw City Markers
+                    const group = L.featureGroup();
+                    fullItinerary.forEach((day, idx) => {
+                        // Simple Circle Marker for cities
+                        const marker = L.circleMarker(day.coordinates, {
+                            radius: 6,
+                            fillColor: '#fff',
+                            color: '#2563eb',
+                            weight: 2,
+                            fillOpacity: 1,
+                            className: 'cursor-pointer' // Add pointer cursor
+                        }).addTo(map);
+
+                        // Add tooltip instead of popup for cleaner hover
+                        marker.bindTooltip(`<b>Day ${day.day}: ${day.city}</b>`, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+
+                        // Add click event for Map-to-List interaction
+                        marker.on('click', () => {
+                            if(onCityClick) onCityClick(day.day);
+                        });
+                        
+                        markersRef.current.push(marker);
+                        group.addLayer(marker);
+                    });
+
+                    // 3. Fit Bounds
+                    const bounds = polyline.getBounds();
+                    if (bounds.isValid()) {
+                        // FIX: Use flyTo for smooth overview transition
+                        const targetCenter = bounds.getCenter();
+                        const targetZoom = map.getBoundsZoom(bounds) - 0.5;
+                        map.flyTo(targetCenter, targetZoom, { duration: 1.5 });
+                    }
+                }
+
+            }, [activeDay, activeSpot, fullItinerary]); // Dependencies
+
+            // FlyTo Effect for specific spot interaction (only when single spot active)
+            useEffect(() => {
+                if (mapInstance.current && activeSpot && typeof L !== 'undefined') {
+                    const { lat, lng } = activeSpot;
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        mapInstance.current.flyTo([lat, lng], 15, { duration: 1.5 });
+                    }
+                }
+            }, [activeSpot]);
+
+            return (
+                <div className="relative h-full w-full">
+                    <div id="map" ref={mapRef} className="h-full w-full z-0"></div>
+                    {/* Offline Map Placeholder - Visible only when map tiles fail to load (handled by CSS :empty if possible, but JS better) */}
+                    <div className="offline-map-placeholder hidden">
+                        <i className="fas fa-wifi-slash text-4xl mb-4"></i>
+                        <p className="font-bold">離線模式</p>
+                        <p className="text-sm">地圖圖資無法載入，請使用左側列表查看行程，<br/>或點擊「Google Map」按鈕開啟 App 導航。</p>
+                    </div>
+                </div>
+            );
+        };
+
+        // 2. Sidebar Item (Day Card) - WITH ACCORDION ANIMATION
+        const DayCard = ({ data, isActive, onClick, onSpotClick, activeSpot }) => {
+            return (
+                <div 
+                    id={`day-${data.day}`} 
+                    className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}
+                >
+                    <div 
+                        className="p-4 cursor-pointer flex justify-between items-center sticky top-0 bg-white z-20"
+                        onClick={onClick}
+                    >
+                        <div>
+                            <div className="text-sm font-bold text-blue-600">Day {data.day} - {data.date}</div>
+                            <h3 className="text-lg font-bold text-gray-800 mt-1">{data.title}</h3>
+                        </div>
+                        <div className="text-gray-400">
+                            <i className={`fas fa-chevron-down transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}></i>
+                        </div>
+                    </div>
+
+                    {/* Accordion Animation Wrapper using CSS Grid */}
+                    <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isActive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                            <div className="p-4 pt-0 text-sm text-gray-600 bg-gray-50/50">
+                                <div className="mb-4 bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
+                                    <p className="font-semibold text-blue-800 mb-1"><i className="fas fa-info-circle mr-1"></i> 行程摘要</p>
+                                    <p>{data.summary}</p>
+                                </div>
+                                <div className="space-y-6 relative pl-6 border-l-2 border-gray-200 ml-4">
+                                    {data.spots.map((spot, idx) => {
+                                        const colorClass = getCategoryColor(spot.type);
+                                        const isSpotActive = activeSpot && activeSpot.name === spot.name;
+
+                                        return (
+                                        <div 
+                                            key={idx} 
+                                            // ADDED: cursor-pointer and onClick handler for app-internal focus
+                                            className={`relative group transition-all duration-300 rounded-lg cursor-pointer ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm' : 'hover:bg-gray-100'}`}
+                                            onClick={() => onSpotClick(spot)}
+                                        >
+                                            <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
+                                                {idx + 1}
+                                            </div>
+                                            <div className={`flex justify-between items-start transition-all duration-300 ${isSpotActive ? 'pl-10' : ''}`}>
+                                                <div className="flex-1">
+                                                    <h4 className={`font-bold text-base transition-colors duration-300 ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>
+                                                        {data.city} | {spot.name}
+                                                    </h4>
+                                                    <div className="flex flex-col mt-1 space-y-1">
+                                                         <span className="text-xs inline-flex items-center text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit">
+                                                            <i className="fas fa-clock mr-1.5 w-3"></i> {spot.time}
+                                                        </span>
+                                                        <span className="text-xs inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit">
+                                                            <i className="fas fa-train mr-1.5 w-3"></i> {spot.trans}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {/* MODIFIED: Google Map External Link Button using Name + City query */}
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); // Prevent triggering the row click
+                                                        // Use encodeURIComponent to handle special characters and spaces correctly
+                                                        const query = encodeURIComponent(`${spot.name} ${data.city}`);
+                                                        window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                                                    }}
+                                                    className="ml-3 w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200"
+                                                    title="在 Google Maps 開啟"
+                                                >
+                                                    <i className="fas fa-map-location-dot text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="bg-amber-50 p-3 rounded border border-amber-100">
+                                        <h5 className="font-bold text-amber-700 mb-1 text-xs uppercase"><i className="fas fa-ticket-alt mr-1"></i> 票券策略</h5>
+                                        <p className="text-xs text-amber-900">{data.tickets}</p>
+                                    </div>
+                                    <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                                        <h5 className="font-bold text-purple-700 mb-1 text-xs uppercase"><i className="fas fa-snowflake mr-1"></i> 冬季注意</h5>
+                                        <p className="text-xs text-purple-900">{data.notes}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // 3. Search Component (Spots Database) - Unchanged
+        const SearchTab = ({ data, onSpotClick }) => {
+            const [searchTerm, setSearchTerm] = useState("");
+            const allSpots = useMemo(() => {
+                let spots = [];
+                data.forEach(day => {
+                    day.spots.forEach(spot => {
+                        spots.push({ ...spot, day: day.day, date: day.date, city: day.city, country: getCountry(day.city) });
+                    });
+                });
+                return spots.sort((a, b) => {
+                    if (a.country !== b.country) return a.country.localeCompare(b.country, "zh-TW");
+                    if (a.city !== b.city) return a.city.localeCompare(b.city);
+                    return a.day - b.day;
+                });
+            }, [data]);
+            const filteredSpots = allSpots.filter(spot => 
+                spot.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                spot.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                spot.country.includes(searchTerm)
+            );
+            return (
+                <div className="h-full flex flex-col bg-white">
+                    <div className="p-4 border-b bg-gray-50">
+                        <div className="relative">
+                            <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜尋國家、城市、景點..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        </div>
+                        <div className="text-xs text-gray-500 mt-2 flex justify-between">
+                            <span>收錄 {allSpots.length} 個地點 (依國家排序)</span>
+                            <span>{filteredSpots.length} 個搜尋結果</span>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        {filteredSpots.length > 0 ? (
+                            filteredSpots.map((spot, idx) => {
+                                const colorClass = getCategoryColor(spot.type);
+                                const rating = spot.type === '景點' ? '🔥 必去' : spot.type === '餐飲' ? '👍 推薦' : '📍 一般';
+                                return (
+                                <div key={idx} className="bg-white border rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow flex justify-between items-center" onClick={() => onSpotClick(spot)}>
+                                    <div>
+                                        <div className="text-xs text-gray-500 mb-1"><span className="font-semibold text-blue-600">{spot.country}</span> · {spot.city} · Day {spot.day}</div>
+                                        <h4 className="font-bold text-gray-800">{spot.name}</h4>
+                                        <div className="flex gap-2 mt-2"><span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{spot.type}</span><span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded border border-yellow-100">{rating}</span></div>
+                                    </div>
+                                    <div className={`w-8 h-8 rounded-full ${colorClass} text-white flex items-center justify-center shrink-0`}><i className="fas fa-map-marker-alt"></i></div>
+                                </div>
+                                )
+                            })
+                        ) : (<div className="text-center text-gray-400 mt-10"><i className="fas fa-ghost text-4xl mb-3"></i><p>找不到相關景點</p></div>)}
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Winter Guide Component - Unchanged
+        const GuideTab = () => {
+             return (
+                <div className="h-full overflow-y-auto bg-white p-5">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">冬季生存指南 <span className="text-sm font-normal text-gray-500 block mt-1">Winter Survival Guide</span></h2>
+                    
+                    <div className="space-y-6">
+                        {/* Weather */}
+                        <section className="bg-sky-50 p-4 rounded-xl border border-sky-100">
+                            <h3 className="font-bold text-sky-800 text-lg mb-2"><i className="fas fa-sun mr-2"></i>日照與天氣</h3>
+                            <ul className="list-disc pl-5 text-sm text-sky-900 space-y-1">
+                                <li><strong>平均氣溫：</strong>-2°C 至 5°C (2月)。</li>
+                                <li><strong>日出日落：</strong>約 07:30 日出，17:30 日落。</li>
+                                <li><strong>黃金時刻：</strong>把握 10:00 - 15:00 拍攝最佳光線。</li>
+                                <li><strong>注意：</strong>中歐室內暖氣極強 (約20-25°C)，採用「洋蔥式穿搭」。</li>
+                            </ul>
+                        </section>
+
+                        {/* Clothing */}
+                        <section className="bg-rose-50 p-4 rounded-xl border border-rose-100">
+                            <h3 className="font-bold text-rose-800 text-lg mb-2"><i className="fas fa-tshirt mr-2"></i>穿著建議</h3>
+                            <div className="text-sm text-rose-900">
+                                <p className="mb-2 font-semibold">必備清單：</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">防風防水大衣</div>
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">發熱衣褲 (Uniqlo)</div>
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">羊毛襪 (厚)</div>
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">防滑防水靴</div>
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">毛帽 (蓋耳)</div>
+                                    <div className="bg-white p-2 rounded text-center shadow-sm">手套 (可觸控)</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Emergency */}
+                        <section className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                            <h3 className="font-bold text-gray-800 text-lg mb-2"><i className="fas fa-phone-alt mr-2"></i>緊急資訊</h3>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between border-b pb-2">
+                                    <span>歐盟通用緊急電話</span>
+                                    <span className="font-mono font-bold text-red-600">112</span>
+                                </div>
+                                <div className="flex justify-between border-b pb-2">
+                                    <span>德國報警/急救</span>
+                                    <span className="font-mono font-bold">110 / 112</span>
+                                </div>
+                                <div className="flex justify-between border-b pb-2">
+                                    <span>奧地利報警/急救</span>
+                                    <span className="font-mono font-bold">133 / 144</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span>捷克/匈牙利報警</span>
+                                    <span className="font-mono font-bold">158 / 107</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* City Cards */}
+                        <section className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                            <h3 className="font-bold text-emerald-800 text-lg mb-2"><i className="fas fa-money-bill-wave mr-2"></i>城市卡攻略</h3>
+                            <div className="space-y-4 text-sm text-emerald-900">
+                                <div>
+                                    <h4 className="font-bold">Salzburg Card (必買)</h4>
+                                    <p className="opacity-80">含所有景點門票與交通，去要塞和海爾布倫宮就回本。</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-bold">Vienna City Card (選購)</h4>
+                                    <p className="opacity-80">主要省交通費，博物館僅打折。建議買交通週票 + 個別門票。</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-bold">Budapest Card (不推薦)</h4>
+                                    <p className="opacity-80">CP值低。買 72hr Travel Card + 個別購票較划算。</p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            );
+        };
+
+        // 5. Main App Layout
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('timeline'); // timeline, search, guide
+            const [activeDayId, setActiveDayId] = useState(null); 
+            const [activeSpot, setActiveSpot] = useState(null);
+            const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Mobile header expansion state
+
+            const activeDayData = itineraryData.find(d => d.day === activeDayId);
+
+            // Handler: Logic for List Header Clicks (The 3-Level Logic)
+            const handleDayHeaderClick = (dayId) => {
+                if (activeDayId === dayId) {
+                    if (activeSpot) {
+                        // Level 3 -> Level 2 (Clear spot, show day overview)
+                        setActiveSpot(null);
+                    } else {
+                        // Level 2 -> Level 1 (Collapse day, show trip overview)
+                        setActiveDayId(null);
+                    }
+                } else {
+                    // Level 1 -> Level 2 or Level 2 -> Level 2 (Switch day)
+                    setActiveDayId(dayId);
+                    setActiveSpot(null);
+                }
+            };
+
+            // Handler: Logic for Spot Click (in List) -> Level 3
+            const handleSpotClick = (spot) => {
+                // MODIFIED: Toggle logic (L3 <-> L2)
+                // If the clicked spot is already active, deselect it (return to day view)
+                if (activeSpot && activeSpot.name === spot.name) {
+                    setActiveSpot(null);
+                } else {
+                    // Otherwise, activate it
+                    setActiveSpot(spot);
+                    if (spot.day) setActiveDayId(spot.day);
+                }
+            };
+
+            // Handler: Logic for Map City Click (L1 -> L2)
+            const handleMapCityClick = (dayId) => {
+                setActiveDayId(dayId);
+                setActiveSpot(null);
+                setActiveTab('timeline'); // Ensure we are on timeline tab
+            };
+
+            // Handler: Logic for Map Marker Click (L2 -> L3)
+            const handleMapSpotMarkerClick = (spot) => {
+                setActiveSpot(spot);
+                // Also ensure day is active (should be already, but just in case)
+                if (spot.day && activeDayId !== spot.day) setActiveDayId(spot.day);
+            };
+
+            // Effect: Auto-scroll to Day or Spot when active state changes
+            useEffect(() => {
+                // We use a small timeout to let the DOM render the expanded list first
+                setTimeout(() => {
+                    if (activeDayId && !activeSpot) {
+                        // Scroll to Day Header
+                        const el = document.getElementById(`day-${activeDayId}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    } 
+                    // Note: Scrolling to individual spot is tricky because we didn't add IDs to spots easily
+                    // but focusing on the Day is usually good enough for L2 transition.
+                }, 100);
+            }, [activeDayId]);
+
+            return (
+                <div className="flex flex-col md:flex-row h-screen w-full">
+                    
+                    {/* Left Column Container (List & Tabs) */}
+                    <div className="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full bg-white shadow-[0_-5px_15px_rgba(0,0,0,0.1)] md:shadow-xl z-20 flex flex-col relative order-2 md:order-1">
+                        
+                        {/* Header */}
+                        <header 
+                            className="px-3 py-2 md:px-4 md:py-3 bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-md shrink-0 z-30 transition-all cursor-pointer md:cursor-default"
+                            onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="flex flex-col w-full">
+                                    <div className="flex items-center justify-between w-full">
+                                        <h1 className="text-sm md:text-base font-bold flex items-center leading-none">
+                                            <i className="fas fa-snowflake mr-2 opacity-80 text-xs"></i>
+                                            24天中歐冬季之旅
+                                            <i className={`fas fa-chevron-down md:hidden ml-2 text-[10px] transition-transform duration-300 ${isHeaderExpanded ? 'rotate-180' : ''}`}></i>
+                                        </h1>
+                                        {!isHeaderExpanded && activeDayId && (
+                                            <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 whitespace-nowrap animate-fade-in">
+                                                Day {activeDayId}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className={`${isHeaderExpanded ? 'flex' : 'hidden'} md:flex mt-1 md:mt-1 transition-all justify-between items-center`}>
+                                        <span className="text-[10px] text-blue-200">2026/02/07 - 03/02</span>
+                                        <span className="bg-blue-800 px-2 py-0.5 rounded text-[10px] shadow-sm whitespace-nowrap border border-blue-600">
+                                            大眾運輸版
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* Content Area (Scrollable) */}
+                        <div className="flex-1 overflow-hidden relative bg-gray-50">
+                            {/* Wrap content in animated container with key for fade effect */}
+                            <div key={activeTab} className="h-full animate-fade-in">
+                                {activeTab === 'timeline' && (
+                                    <div className="h-full overflow-y-auto">
+                                        {itineraryData.map(day => (
+                                            <DayCard 
+                                                key={day.day} 
+                                                data={day} 
+                                                isActive={activeDayId === day.day}
+                                                activeSpot={activeSpot}
+                                                onClick={() => handleDayHeaderClick(day.day)}
+                                                onSpotClick={handleSpotClick}
+                                            />
+                                        ))}
+                                        <div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div>
+                                    </div>
+                                )}
+                                
+                                {activeTab === 'search' && (
+                                    <SearchTab data={itineraryData} onSpotClick={handleSpotClick} />
+                                )}
+
+                                {activeTab === 'guide' && (
+                                    <GuideTab />
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Bottom Tab Navigation */}
+                        <div className="bg-white border-t flex justify-around items-center h-16 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 pb-safe">
+                            <button 
+                                onClick={() => setActiveTab('timeline')}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'timeline' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-list-ul text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'timeline' ? 'scale-110' : ''}"></i>
+                                <span className="text-xs font-medium">每日行程</span>
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('search')}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'search' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-search text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'search' ? 'scale-110' : ''}"></i>
+                                <span className="text-xs font-medium">景點搜尋</span>
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('guide')}
+                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'guide' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-book-open text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'guide' ? 'scale-110' : ''}"></i>
+                                <span className="text-xs font-medium">生存指南</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Map */}
+                    <div className="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full relative border-b md:border-b-0 md:border-l border-gray-300 order-1 md:order-2">
+                        <MapComponent 
+                            activeDay={activeDayData} 
+                            activeSpot={activeSpot} 
+                            fullItinerary={itineraryData} 
+                            onCityClick={handleMapCityClick}
+                            onSpotMarkerClick={handleMapSpotMarkerClick}
+                        />
+                        
+                        {/* Map Overlay Info - With Animation */}
+                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg z-[400] max-w-xs hidden md:block border border-gray-200 transition-all duration-300 hover:shadow-xl">
+                            {/* Use Key to trigger re-animation on change */}
+                            <div key={activeDayId ? `day-${activeDayId}` : 'overview'} className="animate-fade-in">
+                                {activeDayData ? (
+                                    <>
+                                        <h4 className="text-sm font-bold text-gray-800">目前檢視：Day {activeDayId}</h4>
+                                        <p className="text-xs text-gray-600 mt-1">{activeDayData.city}</p>
+                                        {activeSpot && (
+                                            <div className="mt-2 pt-2 border-t border-gray-200 animate-fade-in">
+                                                <span className="text-xs font-bold text-blue-600">聚焦中：</span>
+                                                <span className="text-xs">{activeSpot.name}</span>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-xs text-gray-800">
+                                        <i className="fas fa-map mr-1 text-blue-600"></i>
+                                        <b>全覽模式</b>：顯示 24 天跨國移動軌跡
+                                        <p className="text-gray-500 mt-1 font-normal">點擊左側列表查看每日詳細行程</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24天中歐冬季大眾運輸之旅 (2026)</title>
+    
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
