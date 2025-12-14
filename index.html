@@ -5,53 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>24天中歐冬季大眾運輸之旅 (2026)</title>
     
-    <!-- 
-        ★ 離線使用教學 (Offline Usage) ★
-        若您希望在飛機上或無網路環境使用，請執行以下步驟：
-        1. 下載以下檔案到此 html 同一層資料夾：
-           - leaflet.css, leaflet.js (從 https://unpkg.com/leaflet@1.9.4/dist/)
-           - tailwind.js (從 https://cdn.tailwindcss.com)
-           - react.production.min.js, react-dom.production.min.js
-           - babel.min.js
-        2. 修改下方的 <link> 與 <script> 標籤，將 href/src 改為本機檔名 (例如: src="leaflet.js")
-    -->
-
-    <!-- 1. Leaflet CSS -->
+    <!-- 離線與資源載入設定 -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-
-    <!-- 2. FontAwesome (Icon) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- 3. Tailwind CSS (Styling) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
         body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; }
         .leaflet-container { height: 100%; width: 100%; z-index: 10; }
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .leaflet-div-icon { background: transparent; border: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         
-        /* Reset Leaflet DivIcon default background */
-        .leaflet-div-icon {
-            background: transparent;
-            border: none;
-        }
-        /* Mobile Safe Area for Bottom Navigation */
-        .pb-safe {
-            padding-bottom: env(safe-area-inset-bottom);
-        }
-
-        /* --- Animations --- */
+        /* 動畫設定 */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease-out forwards;
-        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         
         .offline-map-placeholder {
             display: none;
@@ -71,22 +45,14 @@
 <body class="bg-gray-50 h-screen overflow-hidden">
     <div id="root" class="h-full"></div>
 
-    <!-- 4. React Core -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    
-    <!-- 5. React DOM -->
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- 6. Babel (for JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- 7. Leaflet JS (Map) - Load strictly before React code executes -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
-        // Helper: Get Color based on Type (Tailwind Class)
         const getCategoryColor = (type) => {
             if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return 'bg-gray-500';
             if (type.includes('住宿')) return 'bg-purple-600';
@@ -94,40 +60,29 @@
             return 'bg-blue-600';
         };
 
-        // Helper: Get Hex Color for Leaflet markers (Visual consistency with Tailwind classes)
         const getCategoryColorHex = (type) => {
-            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280'; // gray-500
-            if (type.includes('住宿')) return '#9333ea'; // purple-600
-            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return '#ef4444'; // red-500
-            return '#2563eb'; // blue-600
+            if (['交通', '返回', '搭機', '移動'].some(k => type.includes(k))) return '#6b7280';
+            if (type.includes('住宿')) return '#9333ea';
+            if (['餐飲', '小吃', '美食'].some(k => type.includes(k))) return '#ef4444';
+            return '#2563eb';
         };
 
-        // Helper: Get Color based on Day Index (5-color cycle)
         const getDayColorHex = (day) => {
-            const colors = [
-                '#3b82f6', // Day 1, 6..: Blue
-                '#f97316', // Day 2, 7..: Orange
-                '#22c55e', // Day 3, 8..: Green
-                '#a855f7', // Day 4, 9..: Purple
-                '#ef4444'  // Day 5, 10..: Red
-            ];
+            const colors = ['#3b82f6', '#f97316', '#22c55e', '#a855f7', '#ef4444'];
             return colors[(day - 1) % 5];
         };
 
-        // Helper: Get Country based on City
         const getCountry = (city) => {
              const map = {
                 'Munich': '德國', 'Füssen': '德國', 'Dresden': '德國', 'Berlin': '德國',
                 'Salzburg': '奧地利', 'Hallstatt': '奧地利', 'Vienna': '奧地利',
-                'Budapest': '匈牙利',
-                'Prague': '捷克', 'Cesky Krumlov': '捷克'
+                'Budapest': '匈牙利', 'Prague': '捷克', 'Cesky Krumlov': '捷克'
             };
             return map[city] || '其他';
         };
 
-        // --- Data: 24 Days Itinerary ---
+        // --- Data: 24 Days Itinerary (No Images) ---
         const itineraryData = [
-            // --- 德國：慕尼黑 (Days 1-3) ---
             {
                 day: 1,
                 date: "02/07 (六)",
@@ -138,9 +93,15 @@
                 tickets: "購買機場城市快鐵票 (S-Bahn) 或 MVV Day Ticket。",
                 notes: "冬季日落約 17:15，建議早點 check-in。準備好保暖衣物。",
                 spots: [
-                    { name: "慕尼黑機場 (MUC)", type: "交通", time: "14:00 | 抵達", trans: "S-Bahn S1 或 S8 (約40分)", lat: 48.3536, lng: 11.7750 },
+                    { 
+                        name: "慕尼黑機場 (MUC)", type: "交通", time: "14:00 | 抵達", trans: "S-Bahn S1 或 S8 (約40分)", lat: 48.3536, lng: 11.7750,
+                        details: { open: "24小時", price: "N/A" }
+                    },
                     { name: "慕尼黑中央車站周邊", type: "住宿", time: "16:00 | Check-in", trans: "步行", lat: 48.1404, lng: 11.5600 },
-                    { name: "瑪麗恩廣場 (Marienplatz)", type: "景點", time: "18:00 | 2小時", trans: "S-Bahn/U-Bahn 至 Marienplatz", lat: 48.1372, lng: 11.5755 }
+                    { 
+                        name: "瑪麗恩廣場 (Marienplatz)", type: "景點", time: "18:00 | 2小時", trans: "S-Bahn/U-Bahn 至 Marienplatz", lat: 48.1372, lng: 11.5755,
+                        details: { open: "全天開放", price: "免費" }
+                    }
                 ]
             },
             {
@@ -155,28 +116,12 @@
                 spots: [
                     { 
                         name: "慕尼黑王宮 (Residenz)", type: "景點", time: "09:30 | 3小時", trans: "U-Bahn U3/U6 至 Odeonsplatz", lat: 48.1402, lng: 11.5782,
-                        details: {
-                            open: "09:00 - 17:00 (最後入場 16:00)",
-                            price: "€10 (博物館) / €15 (聯票)",
-                            images: [
-                                { title: "王宮外觀", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Munich_Residenz_%2828454597603%29.jpg/640px-Munich_Residenz_%2828454597603%29.jpg" },
-                                { title: "古董大廳 (Antiquarium)", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/86/Imperial_Hall%2C_Residenz_Munich%2C_Germany.jpg/640px-Imperial_Hall%2C_Residenz_Munich%2C_Germany.jpg" },
-                                { title: "皇家珍寶館", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Gallery_portraits_detail_Residenz_Munich.jpg/640px-Gallery_portraits_detail_Residenz_Munich.jpg" }
-                            ]
-                        }
+                        details: { open: "09:00 - 17:00 (最後入場 16:00)", price: "€10 (博物館) / €15 (聯票)" }
                     },
                     { name: "英國花園 (Englischer Garten)", type: "景點", time: "14:00 | 1.5小時", trans: "步行或巴士 100", lat: 48.1534, lng: 11.5925 },
                     { 
                         name: "皇家啤酒屋 (Hofbräuhaus)", type: "餐飲", time: "18:00 | 2小時", trans: "步行", lat: 48.1375, lng: 11.5796,
-                        details: {
-                            open: "09:00 - 23:30 (每日營業)",
-                            price: "平均消費 €25 - €35",
-                            images: [
-                                { title: "招牌豬腳 (Schweinshaxe)", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Crispy_German_Pork_Knuckle_%28Schweinshaxe%29_with_Beer_Gravy.jpg/640px-Crispy_German_Pork_Knuckle_%28Schweinshaxe%29_with_Beer_Gravy.jpg" },
-                                { title: "HB 啤酒", url: "https://images.unsplash.com/photo-1606735584930-b9a32038e9da?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3" },
-                                { title: "啤酒屋內部", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/The_State_Hofbr%C3%A4uhaus_in_Munich_1.jpg/640px-The_State_Hofbr%C3%A4uhaus_in_Munich_1.jpg" }
-                            ]
-                        }
+                        details: { open: "09:00 - 23:30 (每日營業)", price: "平均消費 €25 - €35" }
                     }
                 ]
             },
@@ -193,20 +138,11 @@
                     { name: "慕尼黑中央車站", type: "交通", time: "08:30 | 出發", trans: "RE 列車 (約2小時)", lat: 48.1404, lng: 11.5600 },
                     { 
                         name: "新天鵝堡 (Neuschwanstein)", type: "景點", time: "11:30 | 3小時", trans: "富森車站轉 Bus 73/78", lat: 47.5576, lng: 10.7498,
-                        details: {
-                            open: "09:00 - 16:00 (需預約導覽)",
-                            price: "€17.50 (網上預訂費+門票)",
-                            images: [
-                                { title: "冬季夢幻城堡", url: "https://images.unsplash.com/photo-1580644347743-4cb82747440e?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3" },
-                                { title: "雪中全景", url: "https://images.unsplash.com/photo-1548667690-3444464d7c04?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3" },
-                                { title: "瑪麗安橋視角", url: "https://images.unsplash.com/photo-1579782507663-7d84873752e5?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3" }
-                            ]
-                        }
+                        details: { open: "09:00 - 16:00 (需預約)", price: "€17.50 (預訂+門票)" }
                     },
                     { name: "慕尼黑市區", type: "返回", time: "19:00 | 抵達", trans: "RE 列車", lat: 48.1351, lng: 11.5820 }
                 ]
             },
-            // --- 奧地利：薩爾斯堡 (Days 4-6) ---
             {
                 day: 4,
                 date: "02/10 (二)",
@@ -234,15 +170,7 @@
                 spots: [
                     { 
                         name: "薩爾斯堡要塞 (Festung)", type: "景點", time: "09:30 | 2.5小時", trans: "Festungsbahn 纜車", lat: 47.7949, lng: 13.0475,
-                        details: {
-                            open: "09:30 - 17:00",
-                            price: "€14.50 (基本) / 持卡免費",
-                            images: [
-                                { title: "纜車入口", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Festungsbahn_Salzburg_Bergstation.JPG/640px-Festungsbahn_Salzburg_Bergstation.JPG" },
-                                { title: "要塞觀景台", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Salzburg_Festung_Hohensalzburg_View_01.jpg/640px-Salzburg_Festung_Hohensalzburg_View_01.jpg" },
-                                { title: "內部博物館", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Burgmuseum_Salzburg_Interieur.jpg/640px-Burgmuseum_Salzburg_Interieur.jpg" }
-                            ]
-                        }
+                        details: { open: "09:30 - 17:00", price: "€14.50 (基本) / 持卡免費" }
                     },
                     { name: "莫札特出生地", type: "景點", time: "13:00 | 1小時", trans: "步行", lat: 47.8000, lng: 13.0436 },
                     { name: "薩爾斯堡大教堂", type: "景點", time: "15:00 | 1小時", trans: "步行", lat: 47.7979, lng: 13.0450 }
@@ -259,11 +187,13 @@
                 notes: "冬季鹽礦關閉(通常1-2月)，重點在湖景與天空步道(若開放)。末班車較早，務必 16:30 前離開。",
                 spots: [
                     { name: "薩爾斯堡 -> 哈修塔特", type: "交通", time: "08:15 | 2.5小時", trans: "Bus 150 -> Bad Ischl -> Train -> Ferry", lat: 47.5622, lng: 13.6493 },
-                    { name: "哈修塔特明信片觀景點", type: "景點", time: "11:30 | 1小時", trans: "步行", lat: 47.5645, lng: 13.6506 },
+                    { 
+                        name: "哈修塔特明信片觀景點", type: "景點", time: "11:30 | 1小時", trans: "步行", lat: 47.5645, lng: 13.6506,
+                        details: { open: "24小時", price: "免費" }
+                    },
                     { name: "集市廣場 (Marktplatz)", type: "景點", time: "13:30 | 2小時", trans: "步行", lat: 47.5620, lng: 13.6490 }
                 ]
             },
-            // --- 奧地利：維也納 (Days 7-10) ---
             {
                 day: 7,
                 date: "02/13 (五)",
@@ -291,15 +221,7 @@
                 spots: [
                     { 
                         name: "美泉宮 (Schönbrunn)", type: "景點", time: "09:30 | 3.5小時", trans: "U-Bahn U4", lat: 48.1848, lng: 16.3122,
-                        details: {
-                            open: "08:00 - 17:00",
-                            price: "€29 (Grand Tour) / €24 (Imperial)",
-                            images: [
-                                { title: "皇宮正門", url: "https://placehold.co/300x200/e2e8f0/475569?text=Palace+Front" },
-                                { title: "海神噴泉", url: "https://placehold.co/300x200/e2e8f0/475569?text=Neptune+Fountain" },
-                                { title: "凱旋門 Gloriette", url: "https://placehold.co/300x200/e2e8f0/475569?text=Gloriette" }
-                            ]
-                        }
+                        details: { open: "08:00 - 17:00", price: "€29 (Grand Tour) / €24 (Imperial)" }
                     },
                     { name: "聖史蒂芬大教堂", type: "景點", time: "14:30 | 1.5小時", trans: "U-Bahn U1/U3", lat: 48.2085, lng: 16.3738 },
                     { name: "葛拉本大街 (Graben)", type: "逛街", time: "16:00 | 2小時", trans: "步行", lat: 48.2088, lng: 16.3698 }
@@ -335,7 +257,6 @@
                     { name: "多瑙河遊船", type: "體驗", time: "19:00 | 1小時", trans: "Tram 2", lat: 47.4967, lng: 19.0494 }
                 ]
             },
-            // --- 匈牙利：布達佩斯 (Days 11-13) ---
             {
                 day: 11,
                 date: "02/17 (二)",
@@ -363,15 +284,7 @@
                 spots: [
                     { 
                         name: "匈牙利國會大廈", type: "景點", time: "10:00 | 1.5小時", trans: "Metro M2 Kossuth Lajos tér", lat: 47.5076, lng: 19.0456,
-                        details: {
-                            open: "08:00 - 16:00 (需預約)",
-                            price: "HU 10000 (非歐盟公民)",
-                            images: [
-                                { title: "多瑙河畔全景", url: "https://placehold.co/300x200/e2e8f0/475569?text=Parliament+View" },
-                                { title: "金碧輝煌樓梯", url: "https://placehold.co/300x200/e2e8f0/475569?text=Grand+Staircase" },
-                                { title: "王冠展示廳", url: "https://placehold.co/300x200/e2e8f0/475569?text=Crown+Jewels" }
-                            ]
-                        }
+                        details: { open: "08:00 - 16:00 (需預約)", price: "HU 10000 (非歐盟公民)" }
                     },
                     { name: "塞切尼溫泉 (Széchenyi)", type: "體驗", time: "15:00 | 3小時", trans: "Metro M1 Széchenyi fürdő", lat: 47.5186, lng: 19.0822 },
                     { name: "英雄廣場", type: "景點", time: "18:00 | 0.5小時", trans: "步行", lat: 47.5138, lng: 19.0778 }
@@ -392,7 +305,6 @@
                     { name: "自由橋 (Liberty Bridge)", type: "景點", time: "16:30 | 0.5小時", trans: "步行", lat: 47.4856, lng: 19.0547 }
                 ]
             },
-            // --- 捷克：布拉格 (Days 14-18) ---
             {
                 day: 14,
                 date: "02/20 (五)",
@@ -434,15 +346,7 @@
                 spots: [
                     { 
                         name: "布拉格城堡 (Prague Castle)", type: "景點", time: "09:30 | 4小時", trans: "Tram 22 至 Pražský hrad", lat: 50.0909, lng: 14.4005,
-                        details: {
-                            open: "09:00 - 16:00 (冬季)",
-                            price: "CZK 250 (Circuit B)",
-                            images: [
-                                { title: "城堡區全景", url: "https://placehold.co/300x200/e2e8f0/475569?text=Castle+Panorama" },
-                                { title: "聖維特大教堂", url: "https://placehold.co/300x200/e2e8f0/475569?text=St.+Vitus" },
-                                { title: "黃金巷", url: "https://placehold.co/300x200/e2e8f0/475569?text=Golden+Lane" }
-                            ]
-                        }
+                        details: { open: "09:00 - 16:00 (冬季)", price: "CZK 250 (Circuit B)" }
                     },
                     { name: "聖維特大教堂", type: "景點", time: "11:00 | 包含", trans: "步行", lat: 50.0906, lng: 14.4005 },
                     { name: "小城區 (Malá Strana)", type: "逛街", time: "15:00 | 2小時", trans: "步行下山", lat: 50.0883, lng: 14.4042 }
@@ -478,7 +382,6 @@
                     { name: "高堡 (Vyšehrad)", type: "景點", time: "14:00 | 2.5小時", trans: "Metro C 至 Vyšehrad", lat: 50.0645, lng: 14.4179 }
                 ]
             },
-             // --- 德國：德勒斯登/柏林 (Days 19-24) ---
             {
                 day: 19,
                 date: "02/25 (三)",
@@ -570,18 +473,33 @@
             }
         ];
 
-        // --- Components ---
+        // --- Common Component: Spot Details Panel (NO IMAGES) ---
+        const SpotDetailsPanel = ({ details }) => {
+            if (!details) return null;
+            return (
+                <div className="overflow-hidden">
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-xs bg-white rounded p-2 border border-gray-100 shadow-sm mt-3">
+                        <div className="flex items-center text-gray-700">
+                            <i className="far fa-clock text-blue-500 w-5 text-center mr-1"></i>
+                            <span>{details.open}</span>
+                        </div>
+                        <div className="flex items-center text-gray-700">
+                            <i className="fas fa-euro-sign text-amber-500 w-5 text-center mr-1"></i>
+                            <span>{details.price}</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
 
-        // 1. Map Component (Using Raw Leaflet)
+        // 1. Map Component
         const MapComponent = ({ activeSpot, activeDay, fullItinerary, onCityClick, onSpotMarkerClick }) => {
             const mapRef = useRef(null);
             const mapInstance = useRef(null);
             const markersRef = useRef([]);
             const polylineRef = useRef(null);
 
-            // Init Map
             useEffect(() => {
-                // Safety check: if L is not defined, wait a bit or return.
                 if (typeof L === 'undefined') {
                     console.error("Leaflet is not loaded yet.");
                     return;
@@ -590,20 +508,16 @@
                 if (!mapInstance.current && mapRef.current) {
                     mapInstance.current = L.map(mapRef.current).setView([48.1351, 11.5820], 6);
                     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                        subdomains: 'abcd',
-                        maxZoom: 19
+                        attribution: '&copy; OpenStreetMap &copy; CARTO',
+                        subdomains: 'abcd', maxZoom: 19
                     }).addTo(mapInstance.current);
                 }
             }, []);
 
-            // Update Map View & Markers based on Active Day or Full View
             useEffect(() => {
                 if (!mapInstance.current || typeof L === 'undefined') return;
-
                 const map = mapInstance.current;
                 
-                // Clear old markers and lines
                 markersRef.current.forEach(m => map.removeLayer(m));
                 markersRef.current = [];
                 if (polylineRef.current) {
@@ -611,12 +525,8 @@
                     polylineRef.current = null;
                 }
 
-                // --- Scenario 1: Active Day (L2) or Active Spot (L3) ---
-                // Shows: Active Day spots (Big/Numbered) + All other spots (Small Dots)
                 if (activeDay) {
                     const group = L.featureGroup();
-                    
-                    // Iterate through the FULL itinerary to render everything
                     fullItinerary.forEach(day => {
                         day.spots.forEach((spot, idx) => {
                             if(!isNaN(spot.lat) && !isNaN(spot.lng)) {
@@ -624,7 +534,6 @@
                                 const isSelected = activeSpot && activeSpot.name === spot.name;
                                 
                                 if (isCurrentDay) {
-                                    // --- Main Actors: Big Numbered Icons ---
                                     const colorClass = getCategoryColor(spot.type);
                                     const numberIcon = L.divIcon({
                                         className: 'custom-number-icon',
@@ -633,56 +542,36 @@
                                         iconAnchor: [16, 16],
                                         popupAnchor: [0, -16]
                                     });
-
-                                    const marker = L.marker([spot.lat, spot.lng], { 
-                                        icon: numberIcon,
-                                        zIndexOffset: isSelected ? 1000 : 500 // Current day on top
-                                    })
-                                    .bindPopup(`<b>${spot.name}</b><br/>${spot.type}<br/>${spot.time}`)
-                                    .addTo(map)
-                                    .on('click', () => {
-                                        // Inject day info into spot for click handler if missing
-                                        const spotWithDay = { ...spot, day: day.day };
-                                        if(onSpotMarkerClick) onSpotMarkerClick(spotWithDay);
-                                    });
-
+                                    const marker = L.marker([spot.lat, spot.lng], { icon: numberIcon, zIndexOffset: isSelected ? 1000 : 500 })
+                                        .bindPopup(`<b>${spot.name}</b><br/>${spot.type}<br/>${spot.time}`)
+                                        .addTo(map)
+                                        .on('click', () => {
+                                            const spotWithDay = { ...spot, day: day.day };
+                                            if(onSpotMarkerClick) onSpotMarkerClick(spotWithDay);
+                                        });
                                     if (isSelected) marker.openPopup();
                                     markersRef.current.push(marker);
                                     group.addLayer(marker);
-
                                 } else {
-                                    // --- Supporting Cast: Small Colored Dots (Color by Day) ---
-                                    const colorHex = getDayColorHex(day.day); // USE DAY COLOR
+                                    const colorHex = getDayColorHex(day.day);
                                     const circleMarker = L.circleMarker([spot.lat, spot.lng], {
-                                        radius: 4,
-                                        fillColor: colorHex,
-                                        color: '#fff',
-                                        weight: 1,
-                                        opacity: 0.8,
-                                        fillOpacity: 0.8,
-                                        className: 'cursor-pointer'
+                                        radius: 4, fillColor: colorHex, color: '#fff', weight: 1, opacity: 0.8, fillOpacity: 0.8, className: 'cursor-pointer'
                                     })
-                                    // Tooltip clearly shows [Day X]
                                     .bindTooltip(`[Day ${day.day}] ${day.city}: ${spot.name}`, { direction: 'top', offset: [0, -5] }) 
                                     .addTo(map)
                                     .on('click', () => {
-                                        // Allow jumping to other days via map dots
                                         const spotWithDay = { ...spot, day: day.day };
                                         if(onSpotMarkerClick) onSpotMarkerClick(spotWithDay);
                                     });
-
                                     markersRef.current.push(circleMarker);
                                 }
                             }
                         });
                     });
 
-                    // CAMERA CONTROL
                     if (activeSpot && !isNaN(activeSpot.lat) && !isNaN(activeSpot.lng)) {
-                        // L3: Fly to specific spot
                         map.flyTo([activeSpot.lat, activeSpot.lng], 15, { duration: 1.5 });
                     } else if (group.getLayers().length > 0) {
-                        // L2: Fit bounds to current day's spots only (ignore background dots for zoom)
                         const bounds = group.getBounds();
                         if (bounds.isValid()) {
                             const targetCenter = bounds.getCenter();
@@ -691,44 +580,18 @@
                             map.flyTo(targetCenter, finalZoom, { duration: 1.5 });
                         }
                     }
-
                 } else if (fullItinerary) {
-                    // --- Scenario 2: Overview (L1) ---
-                    // Draw Polyline & Cities (Clean View)
                     const trajectory = fullItinerary.map(d => d.coordinates);
-                    const polyline = L.polyline(trajectory, { 
-                        color: '#2563eb', 
-                        weight: 3, 
-                        dashArray: '8, 8', 
-                        opacity: 0.6 
-                    }).addTo(map);
+                    const polyline = L.polyline(trajectory, { color: '#2563eb', weight: 3, dashArray: '8, 8', opacity: 0.6 }).addTo(map);
                     polylineRef.current = polyline;
-
-                    const group = L.featureGroup();
-                    fullItinerary.forEach((day, idx) => {
+                    fullItinerary.forEach((day) => {
                         const marker = L.circleMarker(day.coordinates, {
-                            radius: 6,
-                            fillColor: '#fff',
-                            color: '#2563eb',
-                            weight: 2,
-                            fillOpacity: 1,
-                            className: 'cursor-pointer'
+                            radius: 6, fillColor: '#fff', color: '#2563eb', weight: 2, fillOpacity: 1, className: 'cursor-pointer'
                         }).addTo(map);
-
-                        marker.bindTooltip(`<b>Day ${day.day}: ${day.city}</b>`, {
-                            permanent: false,
-                            direction: 'top'
-                        });
-
-                        marker.on('click', () => {
-                            if(onCityClick) onCityClick(day.day);
-                        });
-                        
+                        marker.bindTooltip(`<b>Day ${day.day}: ${day.city}</b>`, { permanent: false, direction: 'top' });
+                        marker.on('click', () => { if(onCityClick) onCityClick(day.day); });
                         markersRef.current.push(marker);
-                        group.addLayer(marker);
                     });
-
-                    // Fit Bounds
                     const bounds = polyline.getBounds();
                     if (bounds.isValid()) {
                         const targetCenter = bounds.getCenter();
@@ -736,23 +599,11 @@
                         map.flyTo(targetCenter, targetZoom, { duration: 1.5 });
                     }
                 }
-
-            }, [activeDay, activeSpot, fullItinerary]); // Dependencies
-
-            // FlyTo Effect for specific spot interaction (only when single spot active)
-            useEffect(() => {
-                if (mapInstance.current && activeSpot) {
-                    const { lat, lng } = activeSpot;
-                    if (!isNaN(lat) && !isNaN(lng)) {
-                        mapInstance.current.flyTo([lat, lng], 15, { duration: 1.5 });
-                    }
-                }
-            }, [activeSpot]);
+            }, [activeDay, activeSpot, fullItinerary]);
 
             return (
                 <div className="relative h-full w-full">
                     <div id="map" ref={mapRef} className="h-full w-full z-0"></div>
-                    {/* Offline Map Placeholder - Visible only when map tiles fail to load (handled by CSS :empty if possible, but JS better) */}
                     <div className="offline-map-placeholder hidden">
                         <i className="fas fa-wifi-slash text-4xl mb-4"></i>
                         <p className="font-bold">離線模式</p>
@@ -762,27 +613,17 @@
             );
         };
 
-        // 2. Sidebar Item (Day Card) - WITH ACCORDION ANIMATION
+        // 2. Sidebar Item (Day Card)
         const DayCard = ({ data, isActive, onClick, onSpotClick, activeSpot }) => {
             return (
-                <div 
-                    id={`day-${data.day}`} 
-                    className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}
-                >
-                    <div 
-                        className="p-4 cursor-pointer flex justify-between items-center sticky top-0 bg-white z-20"
-                        onClick={onClick}
-                    >
+                <div id={`day-${data.day}`} className={`border-b border-gray-200 transition-all duration-300 ${isActive ? 'bg-white shadow-lg' : 'bg-white hover:bg-gray-50'}`}>
+                    <div className="p-4 cursor-pointer flex justify-between items-center sticky top-0 bg-white z-20" onClick={onClick}>
                         <div>
                             <div className="text-sm font-bold text-blue-600">Day {data.day} - {data.date}</div>
                             <h3 className="text-lg font-bold text-gray-800 mt-1">{data.title}</h3>
                         </div>
-                        <div className="text-gray-400">
-                            <i className={`fas fa-chevron-down transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}></i>
-                        </div>
+                        <div className="text-gray-400"><i className={`fas fa-chevron-down transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}></i></div>
                     </div>
-
-                    {/* Accordion Animation Wrapper using CSS Grid */}
                     <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isActive ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                         <div className="overflow-hidden">
                             <div className="p-4 pt-0 text-sm text-gray-600 bg-gray-50/50">
@@ -794,83 +635,35 @@
                                     {data.spots.map((spot, idx) => {
                                         const colorClass = getCategoryColor(spot.type);
                                         const isSpotActive = activeSpot && activeSpot.name === spot.name;
-
                                         return (
-                                        <div 
-                                            key={idx} 
-                                            className={`relative group transition-all duration-300 rounded-lg cursor-pointer ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm ring-1 ring-blue-100' : 'hover:bg-gray-100'}`}
-                                            onClick={() => onSpotClick(spot)}
-                                        >
-                                            <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>
-                                                {idx + 1}
-                                            </div>
+                                        <div key={idx} className={`relative group transition-all duration-300 rounded-lg cursor-pointer ${isSpotActive ? 'bg-blue-50 -mx-2 px-2 py-2 shadow-sm ring-1 ring-blue-100' : 'hover:bg-gray-100'}`} onClick={() => onSpotClick(spot)}>
+                                            <div className={`absolute ${isSpotActive ? 'left-[0px]' : '-left-[35px]'} top-2 h-8 w-8 rounded-full ${colorClass} border-2 border-white text-white flex items-center justify-center text-sm font-bold shadow-sm z-10 transition-all duration-300`}>{idx + 1}</div>
                                             <div className={`flex justify-between items-start transition-all duration-300 ${isSpotActive ? 'pl-10' : ''}`}>
                                                 <div className="flex-1">
-                                                    <h4 className={`font-bold text-base transition-colors duration-300 ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>
-                                                        {data.city} | {spot.name}
-                                                    </h4>
+                                                    <h4 className={`font-bold text-base transition-colors duration-300 ${isSpotActive ? 'text-blue-800' : 'text-gray-800'}`}>{data.city} | {spot.name}</h4>
                                                     <div className="flex flex-col mt-1 space-y-1">
-                                                         <span className="text-xs inline-flex items-center text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit">
-                                                            <i className="fas fa-clock mr-1.5 w-3"></i> {spot.time}
-                                                        </span>
-                                                        <span className="text-xs inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit">
-                                                            <i className="fas fa-train mr-1.5 w-3"></i> {spot.trans}
-                                                        </span>
+                                                         <span className="text-xs inline-flex items-center text-gray-500 bg-gray-100 px-2 py-0.5 rounded w-fit"><i className="fas fa-clock mr-1.5 w-3"></i> {spot.time}</span>
+                                                        <span className="text-xs inline-flex items-center text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded w-fit"><i className="fas fa-train mr-1.5 w-3"></i> {spot.trans}</span>
                                                     </div>
                                                 </div>
-                                                <button 
-                                                    onClick={(e) => { 
-                                                        e.stopPropagation(); 
-                                                        const query = encodeURIComponent(`${spot.name} ${data.city}`);
-                                                        window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-                                                    }}
-                                                    className="ml-3 w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200"
-                                                    title="在 Google Maps 開啟"
-                                                >
+                                                <button onClick={(e) => { e.stopPropagation(); const query = encodeURIComponent(`${spot.name} ${data.city}`); window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank'); }} className="ml-3 w-8 h-8 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200" title="在 Google Maps 開啟">
                                                     <i className="fas fa-map-location-dot text-sm"></i>
                                                 </button>
                                             </div>
-
-                                            {/* EXPANDABLE DETAILS SECTION */}
-                                            {spot.details && (
-                                                <div className={`overflow-hidden transition-[max-height] duration-500 ease-in-out ${isSpotActive ? 'max-h-96 opacity-100 mt-3' : 'max-h-0 opacity-0'}`}>
-                                                    {/* Info Row */}
-                                                    <div className="grid grid-cols-2 gap-2 mb-3 text-xs bg-white rounded p-2 border border-gray-100">
-                                                        <div className="flex items-center text-gray-700">
-                                                            <i className="far fa-clock text-blue-500 w-5 text-center mr-1"></i>
-                                                            <span>{spot.details.open}</span>
-                                                        </div>
-                                                        <div className="flex items-center text-gray-700">
-                                                            <i className="fas fa-euro-sign text-amber-500 w-5 text-center mr-1"></i>
-                                                            <span>{spot.details.price}</span>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {/* Image Gallery (Horizontal Scroll) */}
-                                                    <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-                                                        {spot.details.images.map((img, i) => (
-                                                            <div key={i} className="flex-none w-32 snap-start relative group/img">
-                                                                <img src={img.url} alt={img.title} className="w-full h-20 object-cover rounded shadow-sm border border-gray-200" />
-                                                                <div className="absolute inset-0 bg-black/40 flex items-end p-1 rounded opacity-0 group-hover/img:opacity-100 transition-opacity">
-                                                                    <span className="text-[10px] text-white font-bold truncate w-full">{img.title}</span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            {/* Expandable Details - Using Grid Animation for Smoothness */}
+                                            <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isSpotActive && spot.details ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                                                <SpotDetailsPanel details={spot.details} />
+                                            </div>
                                         </div>
                                         );
                                     })}
                                 </div>
                                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div className="bg-amber-50 p-3 rounded border border-amber-100">
-                                        <h5 className="font-bold text-amber-700 mb-1 text-xs uppercase"><i className="fas fa-ticket-alt mr-1"></i> 票券策略</h5>
-                                        <p className="text-xs text-amber-900">{data.tickets}</p>
+                                        <h5 className="font-bold text-amber-700 mb-1 text-xs uppercase"><i className="fas fa-ticket-alt mr-1"></i> 票券策略</h5><p className="text-xs text-amber-900">{data.tickets}</p>
                                     </div>
                                     <div className="bg-purple-50 p-3 rounded border border-purple-100">
-                                        <h5 className="font-bold text-purple-700 mb-1 text-xs uppercase"><i className="fas fa-snowflake mr-1"></i> 冬季注意</h5>
-                                        <p className="text-xs text-purple-900">{data.notes}</p>
+                                        <h5 className="font-bold text-purple-700 mb-1 text-xs uppercase"><i className="fas fa-snowflake mr-1"></i> 冬季注意</h5><p className="text-xs text-purple-900">{data.notes}</p>
                                     </div>
                                 </div>
                             </div>
@@ -880,343 +673,119 @@
             );
         };
 
-        // 3. Search Component (Spots Database) - Modified
-        const SearchTab = ({ data, onSpotClick }) => {
+        // 3. Search Component
+        const SearchTab = ({ data, onSpotClick, activeSpot }) => {
             const [searchTerm, setSearchTerm] = useState("");
             const allSpots = useMemo(() => {
                 let spots = [];
                 data.forEach(day => {
-                    day.spots.forEach(spot => {
-                        spots.push({ ...spot, day: day.day, date: day.date, city: day.city, country: getCountry(day.city) });
-                    });
+                    day.spots.forEach(spot => spots.push({ ...spot, day: day.day, date: day.date, city: day.city, country: getCountry(day.city) }));
                 });
-                return spots.sort((a, b) => {
-                    if (a.country !== b.country) return a.country.localeCompare(b.country, "zh-TW");
-                    if (a.city !== b.city) return a.city.localeCompare(b.city);
-                    return a.day - b.day;
-                });
+                return spots.sort((a, b) => a.day - b.day);
             }, [data]);
-            const filteredSpots = allSpots.filter(spot => 
-                spot.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                spot.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                spot.country.includes(searchTerm)
-            );
+            const filteredSpots = allSpots.filter(spot => spot.name.toLowerCase().includes(searchTerm.toLowerCase()) || spot.city.toLowerCase().includes(searchTerm.toLowerCase()));
+            
             return (
                 <div className="h-full flex flex-col bg-white">
                     <div className="p-4 border-b bg-gray-50">
-                        <div className="relative">
-                            <i className="fas fa-search absolute left-3 top-3 text-gray-400"></i>
-                            <input type="text" className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜尋國家、城市、景點..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                        </div>
-                        <div className="text-xs text-gray-500 mt-2 flex justify-between">
-                            <span>收錄 {allSpots.length} 個地點 (依國家排序)</span>
-                            <span>{filteredSpots.length} 個搜尋結果</span>
-                        </div>
+                        <div className="relative"><i className="fas fa-search absolute left-3 top-3 text-gray-400"></i><input type="text" className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜尋國家、城市、景點..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                        {filteredSpots.length > 0 ? (
-                            filteredSpots.map((spot, idx) => {
-                                const rating = spot.type === '景點' ? '🔥 必去' : spot.type === '餐飲' ? '👍 推薦' : '📍 一般';
-                                return (
-                                <div key={idx} className="bg-white border rounded-lg p-3 hover:shadow-md cursor-pointer transition-shadow flex justify-between items-center" onClick={() => onSpotClick(spot)}>
+                        {filteredSpots.map((spot, idx) => {
+                            const isSpotActive = activeSpot && activeSpot.name === spot.name;
+                            const rating = spot.type === '景點' ? '🔥 必去' : '📍 一般';
+                            return (
+                            <div key={idx} className={`bg-white border rounded-lg p-3 cursor-pointer transition-all ${isSpotActive ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-md'}`} onClick={() => onSpotClick(spot)}>
+                                <div className="flex justify-between items-center">
                                     <div className="flex-1">
                                         <div className="text-xs text-gray-500 mb-1"><span className="font-semibold text-blue-600">{spot.country}</span> · {spot.city} · Day {spot.day}</div>
                                         <h4 className="font-bold text-gray-800">{spot.name}</h4>
                                         <div className="flex gap-2 mt-2"><span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded">{spot.type}</span><span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded border border-yellow-100">{rating}</span></div>
                                     </div>
-                                    {/* MODIFIED: Replaced colored icon with functional Google Maps button */}
-                                    <button 
-                                        onClick={(e) => { 
-                                            e.stopPropagation(); 
-                                            const query = encodeURIComponent(`${spot.name} ${spot.city}`);
-                                            window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-                                        }}
-                                        className="ml-3 w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200 shrink-0"
-                                        title="在 Google Maps 開啟"
-                                    >
-                                        <i className="fas fa-map-location-dot text-base"></i>
-                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); const query = encodeURIComponent(`${spot.name} ${spot.city}`); window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank'); }} className="ml-3 w-10 h-10 flex items-center justify-center rounded-full bg-white border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 hover:shadow-md transition-all duration-200 shrink-0" title="在 Google Maps 開啟"><i className="fas fa-map-location-dot text-base"></i></button>
                                 </div>
-                                )
-                            })
-                        ) : (<div className="text-center text-gray-400 mt-10"><i className="fas fa-ghost text-4xl mb-3"></i><p>找不到相關景點</p></div>)}
+                                {/* ADDED DETAILS TO SEARCH TAB */}
+                                <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isSpotActive && spot.details ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                                    <SpotDetailsPanel details={spot.details} />
+                                </div>
+                            </div>
+                            )
+                        })}
                     </div>
                 </div>
             );
         };
 
-        // 4. Winter Guide Component - Unchanged
-        const GuideTab = () => {
-             return (
-                <div className="h-full overflow-y-auto bg-white p-5">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">冬季生存指南 <span className="text-sm font-normal text-gray-500 block mt-1">Winter Survival Guide</span></h2>
-                    
-                    <div className="space-y-6">
-                        {/* Weather */}
-                        <section className="bg-sky-50 p-4 rounded-xl border border-sky-100">
-                            <h3 className="font-bold text-sky-800 text-lg mb-2"><i className="fas fa-sun mr-2"></i>日照與天氣</h3>
-                            <ul className="list-disc pl-5 text-sm text-sky-900 space-y-1">
-                                <li><strong>平均氣溫：</strong>-2°C 至 5°C (2月)。</li>
-                                <li><strong>日出日落：</strong>約 07:30 日出，17:30 日落。</li>
-                                <li><strong>黃金時刻：</strong>把握 10:00 - 15:00 拍攝最佳光線。</li>
-                                <li><strong>注意：</strong>中歐室內暖氣極強 (約20-25°C)，採用「洋蔥式穿搭」。</li>
-                            </ul>
-                        </section>
+        // 4. Winter Guide Component
+        const GuideTab = () => { return <div className="h-full overflow-y-auto bg-white p-5"><h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">冬季生存指南</h2><div className="space-y-6"><section className="bg-sky-50 p-4 rounded-xl border border-sky-100"><h3 className="font-bold text-sky-800 text-lg mb-2"><i className="fas fa-sun mr-2"></i>日照與天氣</h3><ul className="list-disc pl-5 text-sm text-sky-900 space-y-1"><li>平均氣溫：-2°C 至 5°C。</li><li>日出日落：約 07:30 - 17:30。</li></ul></section></div></div>; };
 
-                        {/* Clothing */}
-                        <section className="bg-rose-50 p-4 rounded-xl border border-rose-100">
-                            <h3 className="font-bold text-rose-800 text-lg mb-2"><i className="fas fa-tshirt mr-2"></i>穿著建議</h3>
-                            <div className="text-sm text-rose-900">
-                                <p className="mb-2 font-semibold">必備清單：</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">防風防水大衣</div>
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">發熱衣褲 (Uniqlo)</div>
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">羊毛襪 (厚)</div>
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">防滑防水靴</div>
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">毛帽 (蓋耳)</div>
-                                    <div className="bg-white p-2 rounded text-center shadow-sm">手套 (可觸控)</div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Emergency */}
-                        <section className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                            <h3 className="font-bold text-gray-800 text-lg mb-2"><i className="fas fa-phone-alt mr-2"></i>緊急資訊</h3>
-                            <div className="space-y-3 text-sm">
-                                <div className="flex justify-between border-b pb-2">
-                                    <span>歐盟通用緊急電話</span>
-                                    <span className="font-mono font-bold text-red-600">112</span>
-                                </div>
-                                <div className="flex justify-between border-b pb-2">
-                                    <span>德國報警/急救</span>
-                                    <span className="font-mono font-bold">110 / 112</span>
-                                </div>
-                                <div className="flex justify-between border-b pb-2">
-                                    <span>奧地利報警/急救</span>
-                                    <span className="font-mono font-bold">133 / 144</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>捷克/匈牙利報警</span>
-                                    <span className="font-mono font-bold">158 / 107</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* City Cards */}
-                        <section className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                            <h3 className="font-bold text-emerald-800 text-lg mb-2"><i className="fas fa-money-bill-wave mr-2"></i>城市卡攻略</h3>
-                            <div className="space-y-4 text-sm text-emerald-900">
-                                <div>
-                                    <h4 className="font-bold">Salzburg Card (必買)</h4>
-                                    <p className="opacity-80">含所有景點門票與交通，去要塞和海爾布倫宮就回本。</p>
-                                </div>
-                                <div>
-                                    <h4 className="font-bold">Vienna City Card (選購)</h4>
-                                    <p className="opacity-80">主要省交通費，博物館僅打折。建議買交通週票 + 個別門票。</p>
-                                </div>
-                                <div>
-                                    <h4 className="font-bold">Budapest Card (不推薦)</h4>
-                                    <p className="opacity-80">CP值低。買 72hr Travel Card + 個別購票較划算。</p>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-                </div>
-            );
-        };
-
-        // 5. Main App Layout
+        // 5. Main App
         const App = () => {
-            const [activeTab, setActiveTab] = useState('timeline'); // timeline, search, guide
-            const [activeDayId, setActiveDayId] = useState(null); 
+            const [activeTab, setActiveTab] = useState('timeline');
+            const [activeDayId, setActiveDayId] = useState(1); // Default to Day 1
             const [activeSpot, setActiveSpot] = useState(null);
-            const [isHeaderExpanded, setIsHeaderExpanded] = useState(false); // Mobile header expansion state
-
+            const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
             const activeDayData = itineraryData.find(d => d.day === activeDayId);
 
-            // Handler: Logic for List Header Clicks (The 3-Level Logic)
             const handleDayHeaderClick = (dayId) => {
                 if (activeDayId === dayId) {
-                    if (activeSpot) {
-                        // Level 3 -> Level 2 (Clear spot, show day overview)
-                        setActiveSpot(null);
-                    } else {
-                        // Level 2 -> Level 1 (Collapse day, show trip overview)
-                        setActiveDayId(null);
-                    }
+                    if (activeSpot) setActiveSpot(null);
+                    else setActiveDayId(null);
                 } else {
-                    // Level 1 -> Level 2 or Level 2 -> Level 2 (Switch day)
                     setActiveDayId(dayId);
                     setActiveSpot(null);
                 }
             };
 
-            // Handler: Logic for Spot Click (in List) -> Level 3
             const handleSpotClick = (spot) => {
-                // MODIFIED: Toggle logic (L3 <-> L2)
-                // If the clicked spot is already active, deselect it (return to day view)
-                if (activeSpot && activeSpot.name === spot.name) {
-                    setActiveSpot(null);
-                } else {
-                    // Otherwise, activate it
+                if (activeSpot && activeSpot.name === spot.name) setActiveSpot(null);
+                else {
                     setActiveSpot(spot);
                     if (spot.day) setActiveDayId(spot.day);
                 }
             };
 
-            // Handler: Logic for Map City Click (L1 -> L2)
             const handleMapCityClick = (dayId) => {
                 setActiveDayId(dayId);
                 setActiveSpot(null);
-                setActiveTab('timeline'); // Ensure we are on timeline tab
+                setActiveTab('timeline');
             };
 
-            // Handler: Logic for Map Marker Click (L2 -> L3)
             const handleMapSpotMarkerClick = (spot) => {
                 setActiveSpot(spot);
-                // Also ensure day is active (should be already, but just in case)
                 if (spot.day && activeDayId !== spot.day) setActiveDayId(spot.day);
             };
 
-            // Effect: Auto-scroll to Day or Spot when active state changes
             useEffect(() => {
-                // We use a small timeout to let the DOM render the expanded list first
                 setTimeout(() => {
                     if (activeDayId && !activeSpot) {
-                        // Scroll to Day Header
                         const el = document.getElementById(`day-${activeDayId}`);
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    } 
-                    // Note: Scrolling to individual spot is tricky because we didn't add IDs to spots easily
-                    // but focusing on the Day is usually good enough for L2 transition.
+                    }
                 }, 100);
             }, [activeDayId]);
 
             return (
                 <div className="flex flex-col md:flex-row h-screen w-full">
-                    
-                    {/* Left Column Container (List & Tabs) */}
                     <div className="w-full md:w-5/12 lg:w-4/12 h-[70%] md:h-full bg-white shadow-[0_-5px_15px_rgba(0,0,0,0.1)] md:shadow-xl z-20 flex flex-col relative order-2 md:order-1">
-                        
-                        {/* Header */}
-                        <header 
-                            className="px-3 py-2 md:px-4 md:py-3 bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-md shrink-0 z-30 transition-all cursor-pointer md:cursor-default"
-                            onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
-                        >
-                            <div className="flex items-center justify-between">
-                                <div className="flex flex-col w-full">
-                                    <div className="flex items-center justify-between w-full">
-                                        <h1 className="text-sm md:text-base font-bold flex items-center leading-none">
-                                            <i className="fas fa-snowflake mr-2 opacity-80 text-xs"></i>
-                                            24天中歐冬季之旅
-                                            <i className={`fas fa-chevron-down md:hidden ml-2 text-[10px] transition-transform duration-300 ${isHeaderExpanded ? 'rotate-180' : ''}`}></i>
-                                        </h1>
-                                        {!isHeaderExpanded && activeDayId && (
-                                            <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 whitespace-nowrap animate-fade-in">
-                                                Day {activeDayId}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className={`${isHeaderExpanded ? 'flex' : 'hidden'} md:flex mt-1 md:mt-1 transition-all justify-between items-center`}>
-                                        <span className="text-[10px] text-blue-200">2026/02/07 - 03/02</span>
-                                        <span className="bg-blue-800 px-2 py-0.5 rounded text-[10px] shadow-sm whitespace-nowrap border border-blue-600">
-                                            大眾運輸版
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                        <header className="px-3 py-2 md:px-4 md:py-3 bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-md shrink-0 z-30 cursor-pointer md:cursor-default" onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}>
+                            <div className="flex items-center justify-between"><h1 className="text-sm md:text-base font-bold flex items-center leading-none"><i className="fas fa-snowflake mr-2 opacity-80 text-xs"></i>24天中歐冬季之旅</h1>{!isHeaderExpanded && activeDayId && <span className="md:hidden text-[10px] font-mono bg-blue-800/50 px-2 py-0.5 rounded border border-blue-500/30 animate-fade-in">Day {activeDayId}</span>}</div>
                         </header>
-
-                        {/* Content Area (Scrollable) */}
                         <div className="flex-1 overflow-hidden relative bg-gray-50">
-                            {/* Wrap content in animated container with key for fade effect */}
                             <div key={activeTab} className="h-full animate-fade-in">
-                                {activeTab === 'timeline' && (
-                                    <div className="h-full overflow-y-auto">
-                                        {itineraryData.map(day => (
-                                            <DayCard 
-                                                key={day.day} 
-                                                data={day} 
-                                                isActive={activeDayId === day.day}
-                                                activeSpot={activeSpot}
-                                                onClick={() => handleDayHeaderClick(day.day)}
-                                                onSpotClick={handleSpotClick}
-                                            />
-                                        ))}
-                                        <div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div>
-                                    </div>
-                                )}
-                                
-                                {activeTab === 'search' && (
-                                    <SearchTab data={itineraryData} onSpotClick={handleSpotClick} />
-                                )}
-
-                                {activeTab === 'guide' && (
-                                    <GuideTab />
-                                )}
+                                {activeTab === 'timeline' && <div className="h-full overflow-y-auto">{itineraryData.map(day => <DayCard key={day.day} data={day} isActive={activeDayId === day.day} activeSpot={activeSpot} onClick={() => handleDayHeaderClick(day.day)} onSpotClick={handleSpotClick} />)}<div className="p-3 bg-gray-100 text-center text-xs text-gray-500 border-t h-20"></div></div>}
+                                {activeTab === 'search' && <SearchTab data={itineraryData} onSpotClick={handleSpotClick} activeSpot={activeSpot} />}
+                                {activeTab === 'guide' && <GuideTab />}
                             </div>
                         </div>
-
-                        {/* Bottom Tab Navigation */}
                         <div className="bg-white border-t flex justify-around items-center h-16 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-30 pb-safe">
-                            <button 
-                                onClick={() => setActiveTab('timeline')}
-                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'timeline' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                <i className="fas fa-list-ul text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'timeline' ? 'scale-110' : ''}"></i>
-                                <span className="text-xs font-medium">每日行程</span>
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('search')}
-                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'search' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                <i className="fas fa-search text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'search' ? 'scale-110' : ''}"></i>
-                                <span className="text-xs font-medium">景點搜尋</span>
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('guide')}
-                                className={`flex flex-col items-center justify-center w-full h-full transition-colors duration-300 ${activeTab === 'guide' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
-                            >
-                                <i className="fas fa-book-open text-lg mb-1 transform transition-transform duration-300 ${activeTab === 'guide' ? 'scale-110' : ''}"></i>
-                                <span className="text-xs font-medium">生存指南</span>
-                            </button>
+                            <button onClick={() => setActiveTab('timeline')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'timeline' ? 'text-blue-600' : 'text-gray-400'}`}><i className="fas fa-list-ul text-lg mb-1"></i><span className="text-xs font-medium">每日行程</span></button>
+                            <button onClick={() => setActiveTab('search')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'search' ? 'text-blue-600' : 'text-gray-400'}`}><i className="fas fa-search text-lg mb-1"></i><span className="text-xs font-medium">景點搜尋</span></button>
+                            <button onClick={() => setActiveTab('guide')} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab === 'guide' ? 'text-blue-600' : 'text-gray-400'}`}><i className="fas fa-book-open text-lg mb-1"></i><span className="text-xs font-medium">生存指南</span></button>
                         </div>
                     </div>
-
-                    {/* Right Column: Map */}
                     <div className="w-full md:w-7/12 lg:w-8/12 h-[30%] md:h-full relative border-b md:border-b-0 md:border-l border-gray-300 order-1 md:order-2">
-                        <MapComponent 
-                            activeDay={activeDayData} 
-                            activeSpot={activeSpot} 
-                            fullItinerary={itineraryData} 
-                            onCityClick={handleMapCityClick}
-                            onSpotMarkerClick={handleMapSpotMarkerClick}
-                        />
-                        
-                        {/* Map Overlay Info - With Animation */}
-                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-lg shadow-lg z-[400] max-w-xs hidden md:block border border-gray-200 transition-all duration-300 hover:shadow-xl">
-                            {/* Use Key to trigger re-animation on change */}
-                            <div key={activeDayId ? `day-${activeDayId}` : 'overview'} className="animate-fade-in">
-                                {activeDayData ? (
-                                    <>
-                                        <h4 className="text-sm font-bold text-gray-800">目前檢視：Day {activeDayId}</h4>
-                                        <p className="text-xs text-gray-600 mt-1">{activeDayData.city}</p>
-                                        {activeSpot && (
-                                            <div className="mt-2 pt-2 border-t border-gray-200 animate-fade-in">
-                                                <span className="text-xs font-bold text-blue-600">聚焦中：</span>
-                                                <span className="text-xs">{activeSpot.name}</span>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="text-xs text-gray-800">
-                                        <i className="fas fa-map mr-1 text-blue-600"></i>
-                                        <b>全覽模式</b>：顯示 24 天跨國移動軌跡
-                                        <p className="text-gray-500 mt-1 font-normal">點擊左側列表查看每日詳細行程</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        <MapComponent activeDay={activeDayData} activeSpot={activeSpot} fullItinerary={itineraryData} onCityClick={handleMapCityClick} onSpotMarkerClick={handleMapSpotMarkerClick} />
                     </div>
                 </div>
             );
